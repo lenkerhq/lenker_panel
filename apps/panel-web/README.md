@@ -104,3 +104,32 @@ revision metadata and create the backend's dummy signed revision metadata for a
 selected node. It can request a backend rollback revision from an applied
 revision and refresh metadata after the action. The page does not execute config
 apply, node file switching, rollback execution, or Xray runtime control itself.
+
+## Provider API UI coverage
+
+Covered in panel-web:
+
+- admin login and session expiry handling;
+- users list/create/update/suspend/activate;
+- plans list/create/update/archive;
+- subscriptions list/create/update/renew;
+- provider-side subscription access export read view;
+- subscription access token status, issue, rotate, and revoke controls;
+- one-time handoff invite status, issue, and revoke controls;
+- nodes list/detail/bootstrap-token creation/drain/undrain/disable/enable;
+- node runtime readiness and recent runtime events read-only detail;
+- node config revisions list/detail/create and applied-revision rollback request.
+
+Provider APIs that remain API/docs-only for now:
+
+- direct single-resource reads that duplicate list/detail data already loaded in
+  the current views, such as `GET /users/{id}`, `GET /plans/{id}`, and
+  `GET /subscriptions/{id}`;
+- node-agent contract endpoints for registration, heartbeat, pending revision
+  fetch, and revision report;
+- consumer-facing endpoints for handoff claim and subscription access read;
+- health and local smoke/debug paths.
+
+This is intentional for the current provider UI: routine operator workflows are
+available in the panel, while node-agent, consumer-only, smoke, and duplicate
+read endpoints stay API-first until a larger product flow needs them.
