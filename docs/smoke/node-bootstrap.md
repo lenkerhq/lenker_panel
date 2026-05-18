@@ -396,6 +396,88 @@ Expected result:
 - `data.active_revision` matches the reported metadata revision.
 - `data.last_validation_status` is `applied`.
 
+## Supervisor Smoke Path
+
+This section verifies the Xray runtime supervisor when
+`LENKER_AGENT_RUNTIME_PROCESS_MODE=local` and `LENKER_AGENT_XRAY_BIN` is set.
+
+Prerequisites:
+
+- Xray binary available on the node or in the Docker bind mount;
+- node-agent configured with `LENKER_AGENT_RUNTIME_PROCESS_MODE=local` and
+  `LENKER_AGENT_XRAY_BIN=/opt/lenker/xray/xray` (or the host path);
+- node registered and node token available.
+
+### 1. Start node-agent with supervisor enabled
+
+```sh
+export LENKER_AGENT_RUNTIME_PROCESS_MODE=local
+export LENKER_AGENT_XRAY_BIN=/usr/local/bin/xray
+make run-node-agent
+```
+
+Or via Docker:
+
+```sh
+export LENKER_AGENT_RUNTIME_PROCESS_MODE=local
+export LENKER_AGENT_XRAY_BIN=/opt/lenker/xray/xray
+make docker-up
+```
+
+### 2. Create a config revision
+
+```sh
+curl -s -X POST http://localhost:8080/api/v1/nodes/$LENKER_NODE_ID/config-revisions \
+  -H "Authorization: Bearer $LENKER_ADMIN_TOKEN"
+```
+
+Wait for node-agent to poll and apply the revision.
+
+### 3. Verify Xray is running
+
+```sh
+curl -s http://localhost:8090/status
+```
+
+Expected signals:
+
+- `runtime_process_state` is `running`;
+- `xray_pid` is greater than 0;
+- `runtime_events` contains a `process_started` event.
+
+### 4. Kill Xray and verify restart
+
+```sh
+kill $(curl -s http://localhost:8090/status | jq .xray_pid)
+sleep 3
+curl -s http://localhost:8090/status
+```
+
+Expected signals:
+
+- `runtime_process_state` is `running` (restarted);
+- `xray_pid` is a new value;
+- `runtime_events` contains `process_crashed` followed by `process_restarted`.
+
+### 5. Apply new revision and verify process replacement
+
+```sh
+curl -s -X POST http://localhost:8080/api/v1/nodes/$LENKER_NODE_ID/config-revisions \
+  -H "Authorization: Bearer $LENKER_ADMIN_TOKEN"
+```
+
+Wait for polling apply, then:
+
+```sh
+curl -s http://localhost:8090/status
+```
+
+Expected signals:
+
+- `runtime_process_state` is `running`;
+- `xray_pid` differs from the previous value;
+- `runtime_events` contains `process_stopped` (old) and `process_started` (new).
+
 ## 10. Runtime Event Ingestion Check
 
 This check verifies the durable recent `runtime_events` path in the local stack.

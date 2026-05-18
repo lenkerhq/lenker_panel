@@ -87,6 +87,9 @@ services:
       LENKER_AGENT_CONFIG_POLL_INTERVAL: ${LENKER_AGENT_CONFIG_POLL_INTERVAL:-30s}
       LENKER_AGENT_XRAY_BIN: ${LENKER_AGENT_XRAY_BIN:-}
       LENKER_AGENT_TLS_ENABLED: "false"
+      # Uncomment to enable Xray runtime supervisor (requires xray binary in xray-bin/):
+      # LENKER_AGENT_RUNTIME_PROCESS_MODE: local
+      # LENKER_AGENT_XRAY_BIN: /opt/lenker/xray/xray
     ports:
       - "8090:8090"
     volumes:

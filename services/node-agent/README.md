@@ -317,13 +317,39 @@ through the same internal validation, optional Xray dry-run, and staged ->
 active path, so active config files can switch back to a previous rendered
 config artifact. This step does not start, restart, reload, or supervise Xray.
 
+Production runtime mode:
+
+When `LENKER_AGENT_RUNTIME_PROCESS_MODE=local` and `LENKER_AGENT_XRAY_BIN` is
+set to a valid Xray binary path (e.g. `/usr/local/bin/xray`), node-agent manages
+the Xray process lifecycle directly:
+
+- After a successful staged -> active config apply, node-agent starts Xray as a
+  child process with `active/config.json`.
+- If Xray exits unexpectedly, node-agent restarts it with exponential backoff
+  (1s, 2s, 4s, ... max 30s).
+- When a new config revision is successfully applied, node-agent gracefully stops
+  the old Xray process (SIGTERM, 5s wait, SIGKILL) and starts a new one with the
+  updated config.
+- On agent shutdown, Xray is gracefully stopped (SIGTERM, 5s wait, SIGKILL).
+- `runtime_process_state` reflects the live process: `running`, `stopped`,
+  `restarting`, or `failed`.
+- `runtime_events` trail records `process_started`, `process_stopped`,
+  `process_crashed`, and `process_restarted` events.
+- Heartbeat payload includes `runtime_process_state` and `xray_pid`.
+
+Example production-like environment:
+
+```sh
+export LENKER_AGENT_RUNTIME_PROCESS_MODE=local
+export LENKER_AGENT_XRAY_BIN=/usr/local/bin/xray
+```
+
+With this configuration, the previous systemd Xray unit should be disabled;
+node-agent owns the Xray process lifecycle.
+
 Not included here yet:
 
-- real node runtime logic
 - VPN configuration generation
-- process supervision implementation
-- real Xray process control
-- real config apply executor beyond local serialization
 - real rollback engine
 - full mTLS or certificate rotation
 - support for protocols beyond the main MVP path
