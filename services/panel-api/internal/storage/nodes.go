@@ -1195,7 +1195,7 @@ func runtimeEventsJSON(events []RuntimeEvent) []byte {
 
 func normalizeRuntimeEventType(value string) string {
 	switch strings.TrimSpace(value) {
-	case "apply_success", "apply_failure", "validation_failure", "dry_run_failure", "process_prepare_start_intent":
+	case "apply_success", "apply_failure", "validation_failure", "dry_run_failure", "process_prepare_start_intent", "runtime_state_restore", "runtime_state_restore_degraded":
 		return strings.TrimSpace(value)
 	default:
 		return "runtime_event"
@@ -1210,6 +1210,8 @@ func normalizeRuntimeEventStatus(value string) string {
 		return "failed"
 	case "ready":
 		return "ready"
+	case "restored":
+		return "restored"
 	default:
 		return ""
 	}

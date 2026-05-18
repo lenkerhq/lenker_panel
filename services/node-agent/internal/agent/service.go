@@ -115,6 +115,10 @@ func (s *Service) Status() Status {
 	return s.status
 }
 
+func (s *Service) NodeToken() string {
+	return s.identity.NodeToken
+}
+
 func (s *Service) BuildRegistrationPayload() (RegistrationPayload, error) {
 	if s.identity.BootstrapToken == "" {
 		return RegistrationPayload{}, ErrBootstrapTokenRequired

@@ -80,16 +80,18 @@ wait_for_restore_heartbeat() {
   revision_id="$2"
   admin_token="$3"
   applied_at="$4"
-  tries="${5:-60}"
+  before_apply_success_count="$5"
+  tries="${6:-60}"
   i=1
   while [ "$i" -le "$tries" ]; do
     detail_json="$(curl -fsS "$PANEL_URL/api/v1/nodes/$node_id" -H "Authorization: Bearer $admin_token")"
     revision_detail_json="$(curl -fsS "$PANEL_URL/api/v1/nodes/$node_id/config-revisions/$revision_id" -H "Authorization: Bearer $admin_token")"
-    if DETAIL="$detail_json" REVISION="$revision_detail_json" APPLIED_AT="$applied_at" ruby -rjson -e '
+    if DETAIL="$detail_json" REVISION="$revision_detail_json" APPLIED_AT="$applied_at" BEFORE_APPLY_SUCCESS_COUNT="$before_apply_success_count" ruby -rjson -e '
         detail = JSON.parse(ENV.fetch("DETAIL")).fetch("data")
         revision = JSON.parse(ENV.fetch("REVISION")).fetch("data")
         events = detail.fetch("runtime_events", [])
         apply_success_count = events.count { |event| event["type"] == "apply_success" && event["status"] == "applied" }
+        before_apply_success_count = ENV.fetch("BEFORE_APPLY_SUCCESS_COUNT").to_i
         ok = revision["status"] == "applied" &&
           revision["applied_at"].to_s == ENV.fetch("APPLIED_AT") &&
           detail["active_revision_id"].to_i == revision["revision_number"].to_i &&
@@ -98,7 +100,7 @@ wait_for_restore_heartbeat() {
           detail["runtime_state"] == "active_config_ready" &&
           detail["active_config_path"].to_s != "" &&
           events.any? { |event| event["type"] == "runtime_state_restore" && event["status"] == "restored" } &&
-          apply_success_count == 1
+          apply_success_count == before_apply_success_count
         exit(ok ? 0 : 1)
       '; then
       return 0
@@ -170,6 +172,14 @@ before_detail_json="$(curl -fsS "$PANEL_URL/api/v1/nodes/$node_id" -H "Authoriza
 before_revision_json="$(curl -fsS "$PANEL_URL/api/v1/nodes/$node_id/config-revisions/$revision_id" -H "Authorization: Bearer $admin_token")"
 before_status_json="$(curl -fsS "$AGENT_URL/status")"
 applied_at="$(printf '%s' "$before_revision_json" | json_get data.applied_at)"
+before_agent_apply_success_count="$(STATUS="$before_status_json" ruby -rjson -e '
+  status = JSON.parse(ENV.fetch("STATUS")).fetch("data")
+  puts status.fetch("runtime_events", []).count { |event| event["type"] == "apply_success" && event["status"] == "applied" }
+')"
+before_persisted_apply_success_count="$(DETAIL="$before_detail_json" ruby -rjson -e '
+  detail = JSON.parse(ENV.fetch("DETAIL")).fetch("data")
+  puts detail.fetch("runtime_events", []).count { |event| event["type"] == "apply_success" && event["status"] == "applied" }
+')"
 
 log "checking persisted active artifacts before restart"
 docker compose -f "$COMPOSE_FILE" exec -T node-agent sh -c \
@@ -183,22 +193,23 @@ wait_for_url "$AGENT_URL/healthz" "node-agent after restart" 45
 
 log "checking local restored status"
 after_status_json="$(curl -fsS "$AGENT_URL/status")"
-STATUS="$after_status_json" EXPECTED_REVISION="$revision_number" ruby -rjson -e '
+STATUS="$after_status_json" EXPECTED_REVISION="$revision_number" BEFORE_APPLY_SUCCESS_COUNT="$before_agent_apply_success_count" ruby -rjson -e '
   status = JSON.parse(ENV.fetch("STATUS")).fetch("data")
   expected_revision = ENV.fetch("EXPECTED_REVISION").to_i
   events = status.fetch("runtime_events", [])
   apply_success_count = events.count { |event| event["type"] == "apply_success" && event["status"] == "applied" }
+  before_apply_success_count = ENV.fetch("BEFORE_APPLY_SUCCESS_COUNT").to_i
   abort("active revision was not restored") unless status["active_revision"].to_i == expected_revision
   abort("last applied revision was not restored") unless status["last_applied_revision"].to_i == expected_revision
   abort("runtime state was not restored") unless status["runtime_state"] == "active_config_ready"
   abort("validation status was not restored") unless status["last_validation_status"] == "applied"
-  abort("active config path missing") if status["active_config_path"].to_s == ""
+  abort("active config path missing") if status["config_artifact_path"].to_s == ""
   abort("missing restore event") unless events.any? { |event| event["type"] == "runtime_state_restore" && event["status"] == "restored" }
-  abort("unexpected extra apply_success event after restore") unless apply_success_count == 1
+  abort("unexpected extra apply_success event after restore") unless apply_success_count == before_apply_success_count
 '
 
 log "waiting for restored heartbeat ingestion"
-if ! wait_for_restore_heartbeat "$node_id" "$revision_id" "$admin_token" "$applied_at" 60; then
+if ! wait_for_restore_heartbeat "$node_id" "$revision_id" "$admin_token" "$applied_at" "$before_persisted_apply_success_count" 60; then
   fail "panel-api did not observe coherent restored runtime readiness"
 fi
 
@@ -225,6 +236,7 @@ BEFORE_DETAIL="$before_detail_json" BEFORE_REVISION="$before_revision_json" BEFO
     runtime_state: after_detail["runtime_state"],
     last_validation_status: after_detail["last_validation_status"],
     active_config_path_present: after_detail["active_config_path"].to_s != "",
+    local_config_artifact_path_present: after_status["config_artifact_path"].to_s != "",
     agent_restore_events: agent_events.count { |event| event["type"] == "runtime_state_restore" },
     persisted_restore_events: node_events.count { |event| event["type"] == "runtime_state_restore" },
     apply_success_events_after_restore: node_events.count { |event| event["type"] == "apply_success" },

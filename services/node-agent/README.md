@@ -23,6 +23,7 @@ Current foundation:
 - local `GET /status`
 - agent identity, registration payload, heartbeat payload, status, config revision, and rollback placeholder models
 - registration and heartbeat request builders
+- periodic heartbeat sender when panel URL, node id, and node token are configured
 - signed config revision validation with in-memory metadata storage and local config artifact serialization
 - config revision tracking and rollback planning skeleton
 - no-process runtime supervisor skeleton state around validated active config artifacts
@@ -159,7 +160,8 @@ should include `"xray_dry_run_enabled":true`.
 
 The local compose profile also accepts `LENKER_AGENT_NODE_ID`,
 `LENKER_AGENT_NODE_TOKEN`, `LENKER_AGENT_BOOTSTRAP_TOKEN`, and
-`LENKER_AGENT_CONFIG_POLL_INTERVAL`. After creating and registering a node
+`LENKER_AGENT_CONFIG_POLL_INTERVAL`. `LENKER_AGENT_HEARTBEAT_INTERVAL` can also
+be shortened for local smoke checks. After creating and registering a node
 through panel-api, restart `node-agent` with the registered node id/token to
 exercise the polling apply path:
 

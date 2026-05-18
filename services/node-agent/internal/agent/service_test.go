@@ -291,6 +291,53 @@ func TestReportConfigRevisionBuildsBearerRequest(t *testing.T) {
 	}
 }
 
+func TestSendHeartbeatBuildsBearerRequest(t *testing.T) {
+	now := time.Date(2026, 5, 18, 1, 2, 3, 0, time.UTC)
+	var decodedHeartbeat HeartbeatPayload
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/v1/nodes/node-1/heartbeat" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer node-token" {
+			t.Fatalf("unexpected authorization header")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&decodedHeartbeat); err != nil {
+			t.Fatalf("expected heartbeat json: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"status": "active"}})
+	}))
+	defer server.Close()
+
+	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
+	err := client.SendHeartbeat(context.Background(), "node-1", "node-token", HeartbeatPayload{
+		NodeID:               "node-1",
+		AgentVersion:         AgentVersion,
+		Status:               StatusActive,
+		ActiveRevision:       4,
+		LastValidationStatus: "applied",
+		LastAppliedRevision:  4,
+		ActiveConfigPath:     "/var/lib/lenker/node-agent/active/config.json",
+		RuntimeEvents: []RuntimeEvent{{
+			Type:           RuntimeEventStateRestore,
+			Status:         "restored",
+			RevisionNumber: 4,
+		}},
+		SentAt: now,
+	})
+	if err != nil {
+		t.Fatalf("expected heartbeat success: %v", err)
+	}
+	if decodedHeartbeat.NodeID != "node-1" || decodedHeartbeat.ActiveRevision != 4 || decodedHeartbeat.LastValidationStatus != "applied" {
+		t.Fatalf("unexpected heartbeat body: %#v", decodedHeartbeat)
+	}
+	if len(decodedHeartbeat.RuntimeEvents) != 1 || decodedHeartbeat.RuntimeEvents[0].Type != RuntimeEventStateRestore {
+		t.Fatalf("expected runtime restore event in heartbeat body: %#v", decodedHeartbeat.RuntimeEvents)
+	}
+}
+
 func TestFetchPendingConfigRevisionNoPending(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)

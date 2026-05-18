@@ -40,9 +40,10 @@ func Run(ctx context.Context, cfg config.Config) error {
 	defer stop()
 
 	if cfg.PanelURL != "" && cfg.NodeID != "" && cfg.NodeToken != "" {
+		go runHeartbeatLoop(runCtx, logger, agentService, panelClient, cfg.HeartbeatInterval)
 		go runConfigPollingLoop(runCtx, logger, agentService, panelClient, cfg.ConfigPollInterval)
 	} else {
-		logger.Info("config polling disabled until panel url, node id, and node token are configured")
+		logger.Info("panel sync disabled until panel url, node id, and node token are configured")
 	}
 
 	errCh := make(chan error, 1)
@@ -69,6 +70,39 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	logger.Info("node agent stopped")
 	return nil
+}
+
+func runHeartbeatLoop(ctx context.Context, logger *slog.Logger, service *agent.Service, client agent.HeartbeatClient, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+
+	heartbeat := func() {
+		now := time.Now().UTC()
+		payload, err := service.BuildHeartbeatPayload(now)
+		if err != nil {
+			logger.Warn("node heartbeat build failed", "error", err)
+			return
+		}
+		if err := client.SendHeartbeat(ctx, payload.NodeID, service.NodeToken(), payload); err != nil {
+			logger.Warn("node heartbeat failed", "error", err)
+			return
+		}
+		service.MarkHeartbeatSent(now)
+	}
+
+	heartbeat()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			heartbeat()
+		}
+	}
 }
 
 func runConfigPollingLoop(ctx context.Context, logger *slog.Logger, service *agent.Service, client agent.PendingConfigRevisionClient, interval time.Duration) {

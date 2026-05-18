@@ -16,12 +16,17 @@ var (
 	ErrPanelURLRequired        = errors.New("panel url is required")
 	ErrNodeTokenRequired       = errors.New("node token is required")
 	ErrPendingRevisionAuth     = errors.New("pending config revision auth failed")
+	ErrHeartbeatAuth           = errors.New("node heartbeat auth failed")
 	ErrUnexpectedPanelResponse = errors.New("unexpected panel response")
 )
 
 type PendingConfigRevisionClient interface {
 	FetchPendingConfigRevision(ctx context.Context, nodeID string, nodeToken string) (ConfigRevision, bool, error)
 	ReportConfigRevision(ctx context.Context, nodeID string, nodeToken string, revisionID string, report ConfigRevisionReport) error
+}
+
+type HeartbeatClient interface {
+	SendHeartbeat(ctx context.Context, nodeID string, nodeToken string, payload HeartbeatPayload) error
 }
 
 type PanelClient struct {
@@ -140,6 +145,58 @@ func (c PanelClient) ReportConfigRevision(ctx context.Context, nodeID string, no
 		return nil
 	case http.StatusUnauthorized:
 		return ErrPendingRevisionAuth
+	case http.StatusNotFound:
+		return ErrInvalidConfigRevision
+	default:
+		return fmt.Errorf("%w: status %d", ErrUnexpectedPanelResponse, response.StatusCode)
+	}
+}
+
+func (c PanelClient) SendHeartbeat(ctx context.Context, nodeID string, nodeToken string, payload HeartbeatPayload) error {
+	if strings.TrimSpace(nodeID) == "" {
+		return ErrNodeIDRequired
+	}
+	if strings.TrimSpace(nodeToken) == "" {
+		return ErrNodeTokenRequired
+	}
+
+	baseURL := strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+	if baseURL == "" {
+		return ErrPanelURLRequired
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		fmt.Sprintf("%s/api/v1/nodes/%s/heartbeat", baseURL, url.PathEscape(nodeID)),
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Authorization", "Bearer "+nodeToken)
+	request.Header.Set("Content-Type", "application/json")
+
+	httpClient := c.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 10 * time.Second}
+	}
+
+	response, err := httpClient.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	switch response.StatusCode {
+	case http.StatusOK:
+		return nil
+	case http.StatusUnauthorized:
+		return ErrHeartbeatAuth
 	case http.StatusNotFound:
 		return ErrInvalidConfigRevision
 	default:

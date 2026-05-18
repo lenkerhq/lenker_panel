@@ -183,6 +183,34 @@ func TestNormalizeRuntimeEventsBoundsAndCompacts(t *testing.T) {
 	}
 }
 
+func TestNormalizeRuntimeEventsPreservesRestoreTypes(t *testing.T) {
+	now := time.Date(2026, 5, 18, 1, 2, 3, 0, time.UTC)
+	normalized := normalizeRuntimeEvents([]RuntimeEvent{
+		{
+			Type:           "runtime_state_restore",
+			Status:         "restored",
+			RevisionNumber: 7,
+			At:             now,
+		},
+		{
+			Type:           "runtime_state_restore_degraded",
+			Status:         "failed",
+			RevisionNumber: 8,
+			At:             now,
+		},
+	})
+
+	if len(normalized) != 2 {
+		t.Fatalf("expected restore events, got %#v", normalized)
+	}
+	if normalized[0].Type != "runtime_state_restore" || normalized[0].Status != "restored" {
+		t.Fatalf("expected restore event to be preserved, got %#v", normalized[0])
+	}
+	if normalized[1].Type != "runtime_state_restore_degraded" || normalized[1].Status != "failed" {
+		t.Fatalf("expected degraded restore event to be preserved, got %#v", normalized[1])
+	}
+}
+
 type fakeRow []any
 
 func (r fakeRow) Scan(dest ...any) error {
