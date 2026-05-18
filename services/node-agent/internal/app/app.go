@@ -19,6 +19,13 @@ func Run(ctx context.Context, cfg config.Config) error {
 	logger := newLogger(cfg)
 	logger.Info("starting node agent", "addr", cfg.HTTPAddr, "node_id", cfg.NodeID)
 
+	var opts []agent.ServiceOption
+	if cfg.RuntimeProcessMode == "local" && cfg.XrayBin != "" {
+		supervisor := agent.NewXraySupervisor(cfg.XrayBin)
+		opts = append(opts, agent.WithRuntimeProcessRunner(supervisor))
+		defer supervisor.Stop()
+	}
+
 	agentService := agent.NewService(agent.Identity{
 		NodeID:         cfg.NodeID,
 		BootstrapToken: cfg.BootstrapToken,
@@ -27,7 +34,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		StateDir:       cfg.StateDir,
 		XrayBin:        cfg.XrayBin,
 		ProcessMode:    cfg.RuntimeProcessMode,
-	})
+	}, opts...)
 	panelClient := agent.PanelClient{BaseURL: cfg.PanelURL}
 
 	server := &http.Server{

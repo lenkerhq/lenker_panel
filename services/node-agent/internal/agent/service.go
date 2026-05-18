@@ -118,6 +118,8 @@ func NewService(identity Identity, options ...ServiceOption) *Service {
 		}
 	}
 	service.RestoreRuntimeState()
+	service.status.RuntimeProcessMode = processMode
+	service.status.RuntimeMode = runtimeModeForIdentity(identity.XrayBin, processMode)
 	return service
 }
 
