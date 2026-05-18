@@ -358,6 +358,14 @@ active/metadata.json
 state.json
 ```
 
+On node-agent restart, local runtime readiness is restored from `state.json`.
+If that file is absent or malformed, the agent falls back to `active/metadata.json`
+only when active config and metadata artifacts are still valid JSON. A restore
+does not create a new applied report by itself; the next heartbeat should show
+the restored active revision, validation/runtime metadata, artifact paths, and a
+`runtime_state_restore` event. Broken or incomplete local state should surface
+as degraded `prepare_failed` metadata rather than a false ready state.
+
 Rollback is requested by creating a new pending revision from an applied source:
 
 ```sh

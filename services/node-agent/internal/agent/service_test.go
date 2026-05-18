@@ -835,6 +835,119 @@ func TestApplyConfigRevisionWritesLocalArtifacts(t *testing.T) {
 	}
 }
 
+func TestNewServiceRestoresRuntimeStateFromStateFile(t *testing.T) {
+	stateDir := t.TempDir()
+	revision := signedTestConfigRevision(t, "node-1", 4, 3)
+	appliedService := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	if err := appliedService.ApplyConfigRevision(revision); err != nil {
+		t.Fatalf("expected local apply: %v", err)
+	}
+	activeConfigPath := appliedService.Status().ConfigArtifactPath
+
+	restored := NewService(Identity{NodeID: "node-1", NodeToken: "node-token", StateDir: stateDir})
+	status := restored.Status()
+	if status.ActiveRevision != 4 || status.LastAppliedRevision != 4 || status.LastRuntimePrepared != 4 {
+		t.Fatalf("expected restored revision metadata, got %#v", status)
+	}
+	if status.RuntimeState != RuntimeStateActiveConfigReady || status.LastValidationStatus != "applied" {
+		t.Fatalf("expected restored runtime readiness, got %#v", status)
+	}
+	if status.ConfigArtifactPath != activeConfigPath || status.MetadataArtifactPath == "" {
+		t.Fatalf("expected restored artifact paths, got %#v", status)
+	}
+	if len(status.RuntimeEvents) != 2 || status.RuntimeEvents[0].Type != RuntimeEventApplySuccess || status.RuntimeEvents[1].Type != RuntimeEventStateRestore {
+		t.Fatalf("expected apply and restore events, got %#v", status.RuntimeEvents)
+	}
+
+	client := &fakePendingConfigRevisionClient{ok: false}
+	applied, err := restored.PollPendingConfigRevision(context.Background(), client, time.Now())
+	if err != nil {
+		t.Fatalf("expected no-op poll after restore: %v", err)
+	}
+	if applied || client.reported {
+		t.Fatalf("restore must not fake apply/report: applied=%v client=%#v", applied, client)
+	}
+}
+
+func TestNewServiceRestoresRuntimeStateFromActiveMetadataFallback(t *testing.T) {
+	stateDir := t.TempDir()
+	revision := signedTestConfigRevision(t, "node-1", 4, 3)
+	appliedService := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	if err := appliedService.ApplyConfigRevision(revision); err != nil {
+		t.Fatalf("expected local apply: %v", err)
+	}
+	if err := os.Remove(filepath.Join(stateDir, "state.json")); err != nil {
+		t.Fatalf("expected state removal: %v", err)
+	}
+
+	restored := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	status := restored.Status()
+	if status.ActiveRevision != 4 || status.LastAppliedRevision != 4 || status.LastRollbackRevision != 3 {
+		t.Fatalf("expected fallback restore from active metadata, got %#v", status)
+	}
+	if status.RuntimeState != RuntimeStateActiveConfigReady || status.LastValidationStatus != "restored" {
+		t.Fatalf("expected restored readiness from active metadata, got %#v", status)
+	}
+	if status.ConfigArtifactPath != filepath.Join(stateDir, "active", "config.json") {
+		t.Fatalf("expected active config path fallback, got %#v", status)
+	}
+	if len(status.RuntimeEvents) != 1 || status.RuntimeEvents[0].Type != RuntimeEventStateRestore {
+		t.Fatalf("expected fallback restore event, got %#v", status.RuntimeEvents)
+	}
+}
+
+func TestNewServiceMissingRuntimeStateIsSafe(t *testing.T) {
+	service := NewService(Identity{NodeID: "node-1", StateDir: t.TempDir()})
+
+	status := service.Status()
+	if status.ActiveRevision != 0 || status.LastAppliedRevision != 0 {
+		t.Fatalf("missing state must not restore revisions: %#v", status)
+	}
+	if status.RuntimeState != RuntimeStateNotPrepared || len(status.RuntimeEvents) != 0 {
+		t.Fatalf("missing state should stay clean not-prepared status, got %#v", status)
+	}
+}
+
+func TestNewServiceMalformedRuntimeStateFallsBackToActiveMetadata(t *testing.T) {
+	stateDir := t.TempDir()
+	revision := signedTestConfigRevision(t, "node-1", 4, 3)
+	appliedService := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	if err := appliedService.ApplyConfigRevision(revision); err != nil {
+		t.Fatalf("expected local apply: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), []byte(`{"active_revision":`), 0o600); err != nil {
+		t.Fatalf("expected malformed state fixture: %v", err)
+	}
+
+	restored := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	status := restored.Status()
+	if status.ActiveRevision != 4 || status.RuntimeState != RuntimeStateActiveConfigReady {
+		t.Fatalf("expected fallback restore despite malformed state, got %#v", status)
+	}
+	if len(status.RuntimeEvents) != 2 || status.RuntimeEvents[0].Type != RuntimeEventStateDegraded || status.RuntimeEvents[1].Type != RuntimeEventStateRestore {
+		t.Fatalf("expected degraded and restore events, got %#v", status.RuntimeEvents)
+	}
+}
+
+func TestNewServiceIncompleteRuntimeStateIsDegraded(t *testing.T) {
+	stateDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), []byte(`{"active_revision":4}`), 0o600); err != nil {
+		t.Fatalf("expected incomplete state fixture: %v", err)
+	}
+
+	service := NewService(Identity{NodeID: "node-1", StateDir: stateDir})
+	status := service.Status()
+	if status.ActiveRevision != 0 || status.LastAppliedRevision != 0 {
+		t.Fatalf("incomplete state must not restore revisions: %#v", status)
+	}
+	if status.RuntimeState != RuntimeStatePrepareFailed || status.LastRuntimeAttemptStatus != RuntimeAttemptFailed {
+		t.Fatalf("expected degraded runtime state, got %#v", status)
+	}
+	if len(status.RuntimeEvents) != 1 || status.RuntimeEvents[0].Type != RuntimeEventStateDegraded {
+		t.Fatalf("expected degraded restore event, got %#v", status.RuntimeEvents)
+	}
+}
+
 func TestStageFailureLeavesActiveArtifactUntouched(t *testing.T) {
 	stateDir := t.TempDir()
 	activeDir := filepath.Join(stateDir, "active")

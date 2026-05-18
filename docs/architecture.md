@@ -184,6 +184,12 @@ reports read-only runtime readiness metadata (`last_validation_status`, error,
 timestamp, last applied revision, active config path, and a bounded
 `runtime_events` slice) through the revision report and heartbeat contracts so
 panel admins can inspect the latest local validation result.
+On restart, node-agent restores this local runtime readiness from `state.json`
+first and falls back to `active/metadata.json` only if the active config and
+metadata artifacts are still valid JSON. Restore is a local status recovery
+step, not a fresh apply: it does not re-run deployment, does not emit an applied
+report by itself, and moves broken/incomplete local state to a degraded
+`prepare_failed` status.
 
 Node-agent also has a no-process runtime supervisor skeleton. It tracks
 `runtime_mode`, `runtime_process_mode`, `runtime_process_state`, desired

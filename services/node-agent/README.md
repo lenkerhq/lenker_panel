@@ -261,9 +261,11 @@ latest node-local runtime events. The trail keeps the newest events only and is
 intended for development/operator inspection, not as a full audit system.
 Current event types cover apply success, apply failure, validation failure,
 Xray dry-run failure, and the local process prepare/start intent in
-`LENKER_AGENT_RUNTIME_PROCESS_MODE=local`. The trail is stored in local
-`state.json` and is sent with heartbeat/report payloads so panel-api can retain
-a bounded recent node-level trail.
+`LENKER_AGENT_RUNTIME_PROCESS_MODE=local`. Startup restore can also append
+`runtime_state_restore` or `runtime_state_restore_degraded` when local state is
+loaded or partially unusable. The trail is stored in local `state.json` and is
+sent with heartbeat/report payloads so panel-api can retain a bounded recent
+node-level trail.
 
 Local artifact layout under `LENKER_AGENT_STATE_DIR`:
 
@@ -283,6 +285,15 @@ artifacts. `metadata.json` and `state.json` include the revision id, bundle
 hash, signer, rollback target revision, operation kind, source revision metadata
 when present, config path references, runtime process state, and the bounded
 runtime event trail.
+
+On startup the agent restores runtime readiness from `state.json` when present.
+If `state.json` is missing or malformed, it falls back to `active/metadata.json`
+only when active config and metadata artifacts are readable JSON. Restore never
+marks a revision as newly applied and never reports an apply transition by
+itself; the next heartbeat simply carries the restored active revision,
+validation/runtime metadata, artifact paths, and bounded event trail. Broken or
+incomplete local state leaves the agent in a degraded `prepare_failed` runtime
+state instead of pretending that active config is ready.
 
 Rollback is file-level only. A rollback-originated pending revision is applied
 through the same internal validation, optional Xray dry-run, and staged ->

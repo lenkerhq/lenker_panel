@@ -38,6 +38,8 @@ const (
 	RuntimeEventValidationFail = "validation_failure"
 	RuntimeEventDryRunFailure  = "dry_run_failure"
 	RuntimeEventProcessIntent  = "process_prepare_start_intent"
+	RuntimeEventStateRestore   = "runtime_state_restore"
+	RuntimeEventStateDegraded  = "runtime_state_restore_degraded"
 )
 
 const runtimeEventTrailLimit = 20

@@ -107,6 +107,7 @@ func NewService(identity Identity, options ...ServiceOption) *Service {
 			option(service)
 		}
 	}
+	service.RestoreRuntimeState()
 	return service
 }
 
@@ -358,6 +359,7 @@ func (s *Service) ApplyConfigRevisionWithContext(ctx context.Context, revision C
 		RevisionNumber: revision.RevisionNumber,
 		At:             transition.At,
 	})
+	s.TrackValidationResult("applied", "", time.Now().UTC())
 	if err := s.PersistRuntimeState(artifact); err != nil {
 		s.AppendRuntimeEvent(RuntimeEvent{
 			Type:           RuntimeEventApplyFailure,
@@ -367,7 +369,6 @@ func (s *Service) ApplyConfigRevisionWithContext(ctx context.Context, revision C
 		})
 		return err
 	}
-	s.TrackValidationResult("applied", "", time.Now().UTC())
 	return nil
 }
 
@@ -736,6 +737,16 @@ func (s *Service) PersistRuntimeState(artifact ConfigArtifact) error {
 	state["last_runtime_prepared_revision"] = s.status.LastRuntimePrepared
 	state["last_runtime_transition_at"] = s.status.LastRuntimeTransitionAt
 	state["last_runtime_error"] = s.status.LastRuntimeError
+	state["active_revision"] = s.status.ActiveRevision
+	state["staged_revision"] = s.status.StagedRevision
+	state["last_applied_revision"] = s.status.LastAppliedRevision
+	state["last_rollback_revision"] = s.status.LastRollbackRevision
+	state["rollback_candidate_revision"] = s.status.RollbackCandidateRevision
+	state["last_validation_status"] = s.status.LastValidationStatus
+	state["last_validation_error"] = s.status.LastValidationError
+	state["last_validation_at"] = s.status.LastValidationAt
+	state["config_artifact_path"] = s.status.ConfigArtifactPath
+	state["metadata_artifact_path"] = s.status.MetadataArtifactPath
 	state["runtime_events"] = s.status.RuntimeEvents
 	if s.status.RuntimeProcessMode == RuntimeProcessModeLocal {
 		state["process_control"] = "local-skeleton"
@@ -752,6 +763,217 @@ func (s *Service) PersistRuntimeState(artifact ConfigArtifact) error {
 		return fmt.Errorf("%w: %v", ErrConfigArtifactWrite, err)
 	}
 	return nil
+}
+
+func (s *Service) RestoreRuntimeState() {
+	stateDir := strings.TrimSpace(s.identity.StateDir)
+	if stateDir == "" {
+		return
+	}
+	statePath := filepath.Join(stateDir, "state.json")
+	body, err := os.ReadFile(statePath)
+	if err == nil && len(strings.TrimSpace(string(body))) > 0 {
+		var state map[string]any
+		if err := json.Unmarshal(body, &state); err != nil {
+			s.markRuntimeRestoreDegraded("runtime_state_restore_failed:malformed_state")
+			s.restoreRuntimeStateFromActiveMetadata(stateDir)
+			return
+		}
+		if s.applyRuntimeStateMap(state, stateDir) {
+			s.AppendRuntimeEvent(RuntimeEvent{
+				Type:           RuntimeEventStateRestore,
+				Status:         "restored",
+				RevisionNumber: s.status.ActiveRevision,
+				Message:        "runtime state restored from state.json",
+			})
+			return
+		}
+		s.markRuntimeRestoreDegraded("runtime_state_restore_failed:incomplete_state")
+		s.restoreRuntimeStateFromActiveMetadata(stateDir)
+		return
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.markRuntimeRestoreDegraded("runtime_state_restore_failed:state_unreadable")
+	}
+	s.restoreRuntimeStateFromActiveMetadata(stateDir)
+}
+
+func (s *Service) restoreRuntimeStateFromActiveMetadata(stateDir string) {
+	existingEvents := append([]RuntimeEvent(nil), s.status.RuntimeEvents...)
+	metadataPath := filepath.Join(stateDir, "active", "metadata.json")
+	body, err := os.ReadFile(metadataPath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			s.markRuntimeRestoreDegraded("runtime_state_restore_failed:active_metadata_unreadable")
+		}
+		return
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(body, &metadata); err != nil {
+		s.markRuntimeRestoreDegraded("runtime_state_restore_failed:active_metadata_malformed")
+		return
+	}
+	if !s.applyRuntimeStateMap(metadata, stateDir) {
+		s.markRuntimeRestoreDegraded("runtime_state_restore_failed:active_metadata_incomplete")
+		return
+	}
+	if len(existingEvents) > 0 {
+		s.status.RuntimeEvents = append(existingEvents, s.status.RuntimeEvents...)
+		if len(s.status.RuntimeEvents) > runtimeEventTrailLimit {
+			s.status.RuntimeEvents = append([]RuntimeEvent(nil), s.status.RuntimeEvents[len(s.status.RuntimeEvents)-runtimeEventTrailLimit:]...)
+		}
+	}
+	s.status.RuntimeState = RuntimeStateActiveConfigReady
+	if s.status.LastRuntimeAttemptStatus == "" {
+		s.status.LastRuntimeAttemptStatus = RuntimeAttemptSkipped
+	}
+	if s.status.LastDryRunStatus == "" {
+		s.status.LastDryRunStatus = dryRunStatusForValidator(s.xrayDryRun)
+	}
+	if s.status.LastValidationStatus == "" {
+		s.status.LastValidationStatus = "restored"
+	}
+	s.AppendRuntimeEvent(RuntimeEvent{
+		Type:           RuntimeEventStateRestore,
+		Status:         "restored",
+		RevisionNumber: s.status.ActiveRevision,
+		Message:        "runtime state restored from active metadata",
+	})
+}
+
+func (s *Service) applyRuntimeStateMap(state map[string]any, stateDir string) bool {
+	activeRevision, ok := numberAsInt(state["active_revision"])
+	if !ok {
+		activeRevision, ok = numberAsInt(state["revision_number"])
+	}
+	if !ok || activeRevision <= 0 {
+		return false
+	}
+
+	configPath := stringFromState(state, "config_artifact_path")
+	if configPath == "" {
+		configPath = stringFromState(state, "active_config_path")
+	}
+	if configPath == "" {
+		configPath = filepath.Join(stateDir, "active", "config.json")
+	}
+	metadataPath := stringFromState(state, "metadata_artifact_path")
+	if metadataPath == "" {
+		metadataPath = filepath.Join(stateDir, "active", "metadata.json")
+	}
+	if !validJSONFile(configPath) || !validJSONFile(metadataPath) {
+		return false
+	}
+
+	s.status.ActiveRevision = activeRevision
+	s.status.LastAppliedRevision = intFromState(state, "last_applied_revision", activeRevision)
+	s.status.StagedRevision = intFromState(state, "staged_revision", activeRevision)
+	rollbackTarget := intFromState(state, "rollback_target_revision", 0)
+	s.status.LastRollbackRevision = intFromState(state, "last_rollback_revision", rollbackTarget)
+	s.status.RollbackCandidateRevision = intFromState(state, "rollback_candidate_revision", rollbackTarget)
+	s.status.LastRuntimePrepared = intFromState(state, "last_runtime_prepared_revision", activeRevision)
+	s.status.RuntimeState = stringFromStateDefault(state, "runtime_state", RuntimeStateActiveConfigReady)
+	s.status.RuntimeMode = stringFromStateDefault(state, "runtime_mode", s.status.RuntimeMode)
+	s.status.RuntimeProcessMode = normalizeRuntimeProcessMode(stringFromStateDefault(state, "runtime_process_mode", s.status.RuntimeProcessMode))
+	s.status.RuntimeProcessState = stringFromStateDefault(state, "runtime_process_state", s.status.RuntimeProcessState)
+	s.status.RuntimeDesiredState = stringFromStateDefault(state, "runtime_desired_state", RuntimeDesiredStateConfigReady)
+	s.status.LastDryRunStatus = stringFromStateDefault(state, "last_dry_run_status", s.status.LastDryRunStatus)
+	s.status.LastRuntimeAttemptStatus = stringFromStateDefault(state, "last_runtime_attempt_status", RuntimeAttemptSkipped)
+	s.status.LastRuntimeError = stringFromState(state, "last_runtime_error")
+	s.status.LastRuntimeTransitionAt = timeFromState(state, "last_runtime_transition_at")
+	s.status.LastValidationStatus = stringFromState(state, "last_validation_status")
+	s.status.LastValidationError = stringFromState(state, "last_validation_error")
+	s.status.LastValidationAt = timeFromState(state, "last_validation_at")
+	s.status.ConfigArtifactPath = configPath
+	s.status.MetadataArtifactPath = metadataPath
+	s.status.RuntimeEvents = runtimeEventsFromState(state["runtime_events"])
+	return true
+}
+
+func (s *Service) markRuntimeRestoreDegraded(message string) {
+	s.status.RuntimeState = RuntimeStatePrepareFailed
+	s.status.LastRuntimeAttemptStatus = RuntimeAttemptFailed
+	s.status.LastRuntimeError = message
+	s.status.LastRuntimeTransitionAt = time.Now().UTC()
+	s.AppendRuntimeEvent(RuntimeEvent{
+		Type:    RuntimeEventStateDegraded,
+		Status:  "degraded",
+		Message: message,
+	})
+}
+
+func validJSONFile(path string) bool {
+	body, err := os.ReadFile(path)
+	return err == nil && json.Valid(body)
+}
+
+func intFromState(state map[string]any, key string, fallback int) int {
+	if value, ok := numberAsInt(state[key]); ok {
+		return value
+	}
+	return fallback
+}
+
+func stringFromState(state map[string]any, key string) string {
+	value, _ := state[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func stringFromStateDefault(state map[string]any, key string, fallback string) string {
+	if value := stringFromState(state, key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func timeFromState(state map[string]any, key string) time.Time {
+	switch value := state[key].(type) {
+	case time.Time:
+		return value.UTC()
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return time.Time{}
+		}
+		parsed, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return time.Time{}
+		}
+		return parsed.UTC()
+	default:
+		return time.Time{}
+	}
+}
+
+func runtimeEventsFromState(value any) []RuntimeEvent {
+	rawEvents, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	events := make([]RuntimeEvent, 0, len(rawEvents))
+	for _, raw := range rawEvents {
+		rawMap, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		event := RuntimeEvent{
+			Type:                stringFromState(rawMap, "type"),
+			Status:              stringFromState(rawMap, "status"),
+			RevisionNumber:      intFromState(rawMap, "revision_number", 0),
+			Message:             stringFromState(rawMap, "message"),
+			RuntimeMode:         stringFromState(rawMap, "runtime_mode"),
+			RuntimeProcessMode:  stringFromState(rawMap, "runtime_process_mode"),
+			RuntimeProcessState: stringFromState(rawMap, "runtime_process_state"),
+			At:                  timeFromState(rawMap, "at"),
+		}
+		if event.Type == "" {
+			continue
+		}
+		events = append(events, event)
+	}
+	if len(events) > runtimeEventTrailLimit {
+		return append([]RuntimeEvent(nil), events[len(events)-runtimeEventTrailLimit:]...)
+	}
+	return events
 }
 
 func writeFileAtomic(path string, body []byte, perm os.FileMode) error {
