@@ -50,3 +50,6 @@ vpn.md
 vpn_new.md
 AGENTS.md
 .codex-project/
+LOCAL_AI_CONSTRAINTS.md
+LOCAL_CURRENT_STAGE.md
+LOCAL_PROMPT_TEMPLATE.md
