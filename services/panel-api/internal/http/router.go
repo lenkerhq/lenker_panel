@@ -3,6 +3,7 @@ package httpapi
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 type Handler interface {
@@ -17,6 +18,7 @@ type RouterDeps struct {
 	Plans         Handler
 	Subscriptions Handler
 	Nodes         Handler
+	Audit         Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -31,11 +33,26 @@ func NewRouter(deps RouterDeps) http.Handler {
 		deps.Plans,
 		deps.Subscriptions,
 		deps.Nodes,
+		deps.Audit,
 	} {
 		if handler != nil {
 			handler.RegisterRoutes(mux)
 		}
 	}
 
-	return requestLogger(deps.Logger, withCORS(mux))
+	return requestLogger(deps.Logger, withCORS(withRequestMeta(mux)))
+}
+
+func withRequestMeta(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := r.Header.Get("X-Forwarded-For")
+		if ip == "" {
+			ip = r.RemoteAddr
+		}
+		if idx := strings.LastIndex(ip, ":"); idx > 0 && !strings.Contains(ip[idx:], "]") {
+			ip = ip[:idx]
+		}
+		ctx := SetRequestMeta(r.Context(), ip, r.Header.Get("User-Agent"))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }

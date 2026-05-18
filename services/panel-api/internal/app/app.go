@@ -36,7 +36,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	}
 	defer store.Close()
 
-	auditRecorder := audit.NoopRecorder{}
+	auditRecorder := audit.NewPostgresRecorder(store.DB())
 	adminSession := auth.NewSessionMiddleware(logger, store.Admins()).WithAudit(auditRecorder)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
@@ -47,6 +47,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Plans:         plans.NewHandler(logger, store.Plans(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Subscriptions: subscriptions.NewHandler(logger, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Nodes:         nodes.NewHandler(logger, store.Nodes(), adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Audit:         audit.NewHandler(logger, auditRecorder, adminSession.RequireAdmin),
 	})
 
 	server := &http.Server{
