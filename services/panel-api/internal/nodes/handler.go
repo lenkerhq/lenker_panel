@@ -312,6 +312,7 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		RuntimeProcessState  string                 `json:"runtime_process_state"`
 		RuntimeDesiredState  string                 `json:"runtime_desired_state"`
 		RuntimeState         string                 `json:"runtime_state"`
+		XrayPID              int                    `json:"xray_pid"`
 		LastDryRunStatus     string                 `json:"last_dry_run_status"`
 		LastRuntimeAttempt   string                 `json:"last_runtime_attempt_status"`
 		LastRuntimePrepared  int                    `json:"last_runtime_prepared_revision"`
@@ -354,8 +355,8 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtimeMode := strings.TrimSpace(request.RuntimeMode)
-	if runtimeMode != "" && runtimeMode != "no-process" && runtimeMode != "dry-run-only" && runtimeMode != "future-process-managed" {
-		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_mode must be no-process, dry-run-only, or future-process-managed")
+	if runtimeMode != "" && runtimeMode != "no-process" && runtimeMode != "dry-run-only" && runtimeMode != "future-process-managed" && runtimeMode != "local-process-managed" {
+		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_mode must be no-process, dry-run-only, future-process-managed, or local-process-managed")
 		return
 	}
 	runtimeProcessMode := strings.TrimSpace(request.RuntimeProcessMode)
@@ -364,8 +365,8 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtimeProcessState := strings.TrimSpace(request.RuntimeProcessState)
-	if runtimeProcessState != "" && runtimeProcessState != "disabled" && runtimeProcessState != "ready" && runtimeProcessState != "failed" {
-		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_process_state must be disabled, ready, or failed")
+	if runtimeProcessState != "" && runtimeProcessState != "disabled" && runtimeProcessState != "ready" && runtimeProcessState != "failed" && runtimeProcessState != "running" && runtimeProcessState != "stopped" && runtimeProcessState != "restarting" {
+		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_process_state must be disabled, ready, failed, running, stopped, or restarting")
 		return
 	}
 	runtimeState := strings.TrimSpace(request.RuntimeState)
@@ -401,6 +402,7 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		runtimeProcessState != "" ||
 		strings.TrimSpace(request.RuntimeDesiredState) != "" ||
 		runtimeState != "" ||
+		request.XrayPID > 0 ||
 		strings.TrimSpace(request.LastDryRunStatus) != "" ||
 		lastRuntimeAttempt != "" ||
 		lastRuntimePrepared > 0 ||
@@ -425,6 +427,7 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		RuntimeProcessState:    runtimeProcessState,
 		RuntimeDesiredState:    strings.TrimSpace(request.RuntimeDesiredState),
 		RuntimeState:           runtimeState,
+		XrayPID:                request.XrayPID,
 		LastDryRunStatus:       strings.TrimSpace(request.LastDryRunStatus),
 		LastRuntimeAttempt:     lastRuntimeAttempt,
 		LastRuntimePrepared:    lastRuntimePrepared,
@@ -468,6 +471,7 @@ func (h *Handler) Heartbeat(w http.ResponseWriter, r *http.Request) {
 		"runtime_process_state":          node.RuntimeProcessState,
 		"runtime_desired_state":          node.RuntimeDesiredState,
 		"runtime_state":                  node.RuntimeState,
+		"xray_pid":                       node.XrayPID,
 		"last_dry_run_status":            node.LastDryRunStatus,
 		"last_runtime_attempt_status":    node.LastRuntimeAttempt,
 		"last_runtime_prepared_revision": node.LastRuntimePrepared,
@@ -576,8 +580,8 @@ func (h *Handler) ReportConfigRevision(w http.ResponseWriter, r *http.Request) {
 		lastValidationStatus = status
 	}
 	runtimeMode := strings.TrimSpace(request.RuntimeMode)
-	if runtimeMode != "" && runtimeMode != "no-process" && runtimeMode != "dry-run-only" && runtimeMode != "future-process-managed" {
-		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_mode must be no-process, dry-run-only, or future-process-managed")
+	if runtimeMode != "" && runtimeMode != "no-process" && runtimeMode != "dry-run-only" && runtimeMode != "future-process-managed" && runtimeMode != "local-process-managed" {
+		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_mode must be no-process, dry-run-only, future-process-managed, or local-process-managed")
 		return
 	}
 	runtimeProcessMode := strings.TrimSpace(request.RuntimeProcessMode)
@@ -586,8 +590,8 @@ func (h *Handler) ReportConfigRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runtimeProcessState := strings.TrimSpace(request.RuntimeProcessState)
-	if runtimeProcessState != "" && runtimeProcessState != "disabled" && runtimeProcessState != "ready" && runtimeProcessState != "failed" {
-		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_process_state must be disabled, ready, or failed")
+	if runtimeProcessState != "" && runtimeProcessState != "disabled" && runtimeProcessState != "ready" && runtimeProcessState != "failed" && runtimeProcessState != "running" && runtimeProcessState != "stopped" && runtimeProcessState != "restarting" {
+		httpapi.WriteError(w, http.StatusBadRequest, "validation_error", "runtime_process_state must be disabled, ready, failed, running, stopped, or restarting")
 		return
 	}
 	runtimeState := strings.TrimSpace(request.RuntimeState)
@@ -742,6 +746,7 @@ func nodeDetailResponse(node storage.Node) map[string]any {
 		"runtime_process_state":          node.RuntimeProcessState,
 		"runtime_desired_state":          node.RuntimeDesiredState,
 		"runtime_state":                  node.RuntimeState,
+		"xray_pid":                       node.XrayPID,
 		"last_dry_run_status":            node.LastDryRunStatus,
 		"last_runtime_attempt_status":    node.LastRuntimeAttempt,
 		"last_runtime_prepared_revision": node.LastRuntimePrepared,

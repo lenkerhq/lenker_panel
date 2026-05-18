@@ -109,6 +109,7 @@ func TestScanNodeIncludesRuntimeValidationMetadata(t *testing.T) {
 		"failed",
 		"validated-config-ready",
 		"validation_failed",
+		0,
 		"failed",
 		"failed",
 		3,

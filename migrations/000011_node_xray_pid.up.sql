@@ -1,0 +1,1 @@
+ALTER TABLE nodes ADD COLUMN xray_pid integer NOT NULL DEFAULT 0;

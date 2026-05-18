@@ -857,6 +857,7 @@ func (r *fakeNodesRepository) RecordHeartbeat(ctx context.Context, input storage
 		RuntimeMode:          input.RuntimeMode,
 		RuntimeDesiredState:  input.RuntimeDesiredState,
 		RuntimeState:         input.RuntimeState,
+		XrayPID:              input.XrayPID,
 		LastDryRunStatus:     input.LastDryRunStatus,
 		LastRuntimeAttempt:   input.LastRuntimeAttempt,
 		LastRuntimePrepared:  input.LastRuntimePrepared,

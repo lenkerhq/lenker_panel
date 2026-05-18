@@ -35,6 +35,13 @@ type Service struct {
 	configRevisions map[int]ConfigRevision
 	xrayDryRun      XrayDryRunValidator
 	runtime         RuntimeSupervisor
+	pidProvider     RuntimePIDProvider
+}
+
+// RuntimePIDProvider is optionally implemented by a RuntimeProcessRunner to
+// expose the managed process PID.
+type RuntimePIDProvider interface {
+	PID() int
 }
 
 type ServiceOption func(*Service)
@@ -66,6 +73,9 @@ func WithRuntimeProcessRunner(runner RuntimeProcessRunner) ServiceOption {
 		s.runtime = NoProcessRuntimeSupervisor{
 			ProcessMode: s.identity.ProcessMode,
 			Runner:      runner,
+		}
+		if p, ok := runner.(RuntimePIDProvider); ok {
+			s.pidProvider = p
 		}
 	}
 }
@@ -138,6 +148,11 @@ func (s *Service) BuildHeartbeatPayload(now time.Time) (HeartbeatPayload, error)
 		return HeartbeatPayload{}, ErrNodeIDRequired
 	}
 
+	var xrayPID int
+	if s.pidProvider != nil {
+		xrayPID = s.pidProvider.PID()
+	}
+
 	return HeartbeatPayload{
 		NodeID:               s.identity.NodeID,
 		AgentVersion:         AgentVersion,
@@ -148,6 +163,7 @@ func (s *Service) BuildHeartbeatPayload(now time.Time) (HeartbeatPayload, error)
 		RuntimeProcessState:  s.status.RuntimeProcessState,
 		RuntimeDesiredState:  s.status.RuntimeDesiredState,
 		RuntimeState:         s.status.RuntimeState,
+		XrayPID:              xrayPID,
 		LastDryRunStatus:     s.status.LastDryRunStatus,
 		LastRuntimeAttempt:   s.status.LastRuntimeAttemptStatus,
 		LastRuntimePrepared:  s.status.LastRuntimePrepared,

@@ -87,6 +87,7 @@ type HeartbeatPayload struct {
 	RuntimeProcessState  string         `json:"runtime_process_state,omitempty"`
 	RuntimeDesiredState  string         `json:"runtime_desired_state,omitempty"`
 	RuntimeState         string         `json:"runtime_state,omitempty"`
+	XrayPID              int            `json:"xray_pid,omitempty"`
 	LastDryRunStatus     string         `json:"last_dry_run_status,omitempty"`
 	LastRuntimeAttempt   string         `json:"last_runtime_attempt_status,omitempty"`
 	LastRuntimePrepared  int            `json:"last_runtime_prepared_revision,omitempty"`

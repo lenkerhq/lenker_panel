@@ -10,13 +10,17 @@ const (
 	RuntimeModeNoProcess  = "no-process"
 	RuntimeModeDryRunOnly = "dry-run-only"
 	RuntimeModeFuture     = "future-process-managed"
+	RuntimeModeLocal      = "local-process-managed"
 
 	RuntimeProcessModeDisabled = "disabled"
 	RuntimeProcessModeLocal    = "local"
 
-	RuntimeProcessStateDisabled = "disabled"
-	RuntimeProcessStateReady    = "ready"
-	RuntimeProcessStateFailed   = "failed"
+	RuntimeProcessStateDisabled   = "disabled"
+	RuntimeProcessStateReady      = "ready"
+	RuntimeProcessStateFailed     = "failed"
+	RuntimeProcessStateRunning    = "running"
+	RuntimeProcessStateStopped    = "stopped"
+	RuntimeProcessStateRestarting = "restarting"
 
 	RuntimeDesiredStateConfigReady = "validated-config-ready"
 
@@ -40,6 +44,10 @@ const (
 	RuntimeEventProcessIntent  = "process_prepare_start_intent"
 	RuntimeEventStateRestore   = "runtime_state_restore"
 	RuntimeEventStateDegraded  = "runtime_state_restore_degraded"
+	RuntimeEventProcessStarted = "process_started"
+	RuntimeEventProcessStopped = "process_stopped"
+	RuntimeEventProcessCrashed = "process_crashed"
+	RuntimeEventProcessRestart = "process_restarted"
 )
 
 const runtimeEventTrailLimit = 20
