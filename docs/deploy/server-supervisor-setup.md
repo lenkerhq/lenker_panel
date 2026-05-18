@@ -112,3 +112,31 @@ Expected output ends with `=== PASS ===`.
 
 - `sudo systemctl stop xray && sudo systemctl disable xray`
 - Verify no port conflict on 8443/tcp before node-agent starts Xray
+
+## Known issues during first deploy
+
+**DB constraint rejects new process states:**
+
+The `nodes_runtime_process_state_check` constraint must allow `running`,
+`stopped`, and `restarting`. Migration `000011` handles this. If the migration
+was applied before the constraint update, run manually:
+
+```sql
+ALTER TABLE nodes DROP CONSTRAINT nodes_runtime_process_state_check;
+ALTER TABLE nodes ADD CONSTRAINT nodes_runtime_process_state_check
+  CHECK (runtime_process_state IN ('disabled', 'ready', 'failed', 'running', 'stopped', 'restarting'));
+```
+
+**State restore overrides process mode:**
+
+After restart, `state.json` may contain `runtime_process_mode: disabled` from a
+previous run. The fix in `service.go` ensures the identity's process mode takes
+precedence after restore. If you see `runtime_process_mode: disabled` despite
+the env var being set, rebuild node-agent with the latest code.
+
+**Supervisor not starting Xray:**
+
+The `XraySupervisor` must be wired in `app.go`. If `/status` shows
+`runtime_process_mode: local` but `runtime_process_state: disabled`, the app
+is not creating the supervisor. Rebuild with the latest code that includes the
+`WithRuntimeProcessRunner` wiring in `app.go`.
