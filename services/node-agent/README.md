@@ -189,6 +189,21 @@ the next revision, and verifies that the failed report, runtime readiness, and
 `dry_run_failure` event are persisted while the previous active artifact stays
 active.
 
+For the restart/restore check, run:
+
+```sh
+make docker-runtime-restore-smoke
+```
+
+It applies a pending revision, verifies `active/config.json`,
+`active/metadata.json`, and `state.json`, restarts only the `node-agent`
+container, and confirms that `/status` plus panel-api node detail restore the
+active revision, validation/runtime readiness, artifact path, and
+`runtime_state_restore` event. The helper checks observable signals that no new
+revision was created and no fake applied report changed the original
+`applied_at`. This is a local-dev smoke only; it does not start, reload,
+restart, or supervise a real Xray daemon.
+
 `LENKER_LOCAL_XRAY_DIR` is only a local bind-mount source for
 `deploy/docker/docker-compose.local.yml`; no Xray binary is downloaded or baked
 into the image. If `LENKER_AGENT_XRAY_BIN` is set but the binary is missing, the

@@ -431,6 +431,25 @@ missing binary. Expected result:
 - runtime readiness moves to `validation_failed`;
 - persisted `runtime_events` include `dry_run_failure`.
 
+For the scripted restart/restore path, run:
+
+```sh
+make docker-runtime-restore-smoke
+```
+
+The restore helper applies a pending revision, checks persisted active
+artifacts, restarts only the `node-agent` container, then verifies local
+`/status` and panel-api node detail. Expected result:
+
+- `active_revision` and `last_applied_revision` still match the applied
+  revision;
+- `runtime_state` is `active_config_ready`;
+- `last_validation_status` remains `applied`;
+- `active_config_path` is present;
+- `runtime_events` include `runtime_state_restore`;
+- the original revision `applied_at` stays unchanged, which is the observable
+  smoke check that restore did not send a fake applied report.
+
 For the scripted subscription access handoff path, run:
 
 ```sh
@@ -530,7 +549,12 @@ Run, in order:
    - forced dry-run failure reports `failed`;
    - runtime readiness moves to `validation_failed`;
    - persisted `runtime_events` include the failure signal.
-3. `make docker-handoff-smoke`
+3. `make docker-runtime-restore-smoke`
+   - active config artifacts and `state.json` survive node-agent restart;
+   - local `/status` restores active revision and readiness metadata;
+   - panel-api node detail ingests the restored heartbeat;
+   - no fake applied report changes the revision `applied_at`.
+4. `make docker-handoff-smoke`
    - subscription access export matches the applied node/config payload;
    - handoff invite is issued and claimed exactly once;
    - resulting access token can read the redacted client access payload;

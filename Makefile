@@ -6,7 +6,7 @@ OPENAPI_SPEC ?= docs/openapi/panel-api.v1.yaml
 DOCKER_COMPOSE ?= docker compose
 DOCKER_COMPOSE_FILE ?= deploy/docker/docker-compose.local.yml
 
-.PHONY: migrate-up migrate-down migrate-force bootstrap-admin run-panel-api run-node-agent test-panel-api test-node-agent openapi-lint validate-openapi test docker-build docker-up docker-down docker-logs docker-ps docker-bootstrap-admin docker-smoke docker-runtime-smoke docker-runtime-failure-smoke docker-subscription-access-smoke docker-handoff-smoke docker-xray-dry-run-env
+.PHONY: migrate-up migrate-down migrate-force bootstrap-admin run-panel-api run-node-agent test-panel-api test-node-agent openapi-lint validate-openapi test docker-build docker-up docker-down docker-logs docker-ps docker-bootstrap-admin docker-smoke docker-runtime-smoke docker-runtime-failure-smoke docker-runtime-restore-smoke docker-subscription-access-smoke docker-handoff-smoke docker-xray-dry-run-env
 
 migrate-up:
 	@if [ -z "$$LENKER_DATABASE_URL" ]; then echo "LENKER_DATABASE_URL is required"; exit 1; fi
@@ -71,6 +71,9 @@ docker-runtime-smoke:
 
 docker-runtime-failure-smoke:
 	scripts/docker-runtime-failure-smoke.sh
+
+docker-runtime-restore-smoke:
+	scripts/docker-runtime-restore-smoke.sh
 
 docker-subscription-access-smoke:
 	scripts/docker-subscription-access-smoke.sh
