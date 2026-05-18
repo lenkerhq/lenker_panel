@@ -29,6 +29,59 @@ const (
 	DefaultSpiderX        = "/"
 )
 
+type RealityConfig struct {
+	VLESSPort   int
+	SNI         string
+	Dest        string
+	ShortID     string
+	PrivateKey  string
+	PublicKey   string
+	Fingerprint string
+	SpiderX     string
+}
+
+func DefaultRealityConfig() RealityConfig {
+	return RealityConfig{
+		VLESSPort:   DefaultVLESSPort,
+		SNI:         DefaultRealitySNI,
+		Dest:        DefaultRealityDest,
+		ShortID:     DefaultRealityShortID,
+		PrivateKey:  DefaultRealityPrivate,
+		PublicKey:   DefaultRealityPublic,
+		Fingerprint: DefaultFingerprint,
+		SpiderX:     DefaultSpiderX,
+	}
+}
+
+func (cfg RealityConfig) WithDefaults() RealityConfig {
+	defaults := DefaultRealityConfig()
+	if cfg.VLESSPort <= 0 {
+		cfg.VLESSPort = defaults.VLESSPort
+	}
+	if cfg.SNI == "" {
+		cfg.SNI = defaults.SNI
+	}
+	if cfg.Dest == "" {
+		cfg.Dest = defaults.Dest
+	}
+	if cfg.ShortID == "" {
+		cfg.ShortID = defaults.ShortID
+	}
+	if cfg.PrivateKey == "" {
+		cfg.PrivateKey = defaults.PrivateKey
+	}
+	if cfg.PublicKey == "" {
+		cfg.PublicKey = defaults.PublicKey
+	}
+	if cfg.Fingerprint == "" {
+		cfg.Fingerprint = defaults.Fingerprint
+	}
+	if cfg.SpiderX == "" {
+		cfg.SpiderX = defaults.SpiderX
+	}
+	return cfg
+}
+
 type RenderInput struct {
 	NodeID                 string
 	RevisionNumber         int
@@ -73,6 +126,11 @@ type RollbackInput struct {
 }
 
 func RenderVLESSRealityPayload(input RenderInput) map[string]any {
+	return RenderVLESSRealityPayloadWithReality(input, DefaultRealityConfig())
+}
+
+func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConfig) map[string]any {
+	reality = reality.WithDefaults()
 	inboundTag := DefaultVLESSInbound
 	outboundTag := DefaultVLESSOutbound
 	subscriptionInputs := sortedSubscriptionInputs(input.SubscriptionInputs)
@@ -126,7 +184,7 @@ func RenderVLESSRealityPayload(input RenderInput) map[string]any {
 				map[string]any{
 					"tag":      inboundTag,
 					"listen":   "0.0.0.0",
-					"port":     DefaultVLESSPort,
+					"port":     reality.VLESSPort,
 					"protocol": "vless",
 					"settings": map[string]any{
 						"clients":    renderClients(accessEntries),
@@ -138,11 +196,11 @@ func RenderVLESSRealityPayload(input RenderInput) map[string]any {
 						"security": "reality",
 						"realitySettings": map[string]any{
 							"show":         false,
-							"dest":         DefaultRealityDest,
+							"dest":         reality.Dest,
 							"xver":         0,
-							"serverNames":  []any{DefaultRealitySNI},
-							"privateKey":   DefaultRealityPrivate,
-							"shortIds":     []any{DefaultRealityShortID},
+							"serverNames":  []any{reality.SNI},
+							"privateKey":   reality.PrivateKey,
+							"shortIds":     []any{reality.ShortID},
 							"minClientVer": "",
 							"maxClientVer": "",
 							"maxTimeDiff":  0,

@@ -200,11 +200,16 @@ type NodesRepository interface {
 }
 
 type nodesRepository struct {
-	db *sql.DB
+	db      *sql.DB
+	reality configrender.RealityConfig
 }
 
 func NewNodesRepository(db *sql.DB) NodesRepository {
-	return &nodesRepository{db: db}
+	return NewNodesRepositoryWithReality(db, configrender.DefaultRealityConfig())
+}
+
+func NewNodesRepositoryWithReality(db *sql.DB, reality configrender.RealityConfig) NodesRepository {
+	return &nodesRepository{db: db, reality: reality.WithDefaults()}
 }
 
 func (r *nodesRepository) List(ctx context.Context) ([]Node, error) {
@@ -527,7 +532,7 @@ func (r *nodesRepository) CreateDummyConfigRevision(ctx context.Context, input C
 		return ConfigRevision{}, err
 	}
 
-	payload := configrender.RenderVLESSRealityPayload(configrender.RenderInput{
+	payload := configrender.RenderVLESSRealityPayloadWithReality(configrender.RenderInput{
 		NodeID:                 input.NodeID,
 		RevisionNumber:         nextRevision,
 		Hostname:               hostname,
@@ -535,7 +540,7 @@ func (r *nodesRepository) CreateDummyConfigRevision(ctx context.Context, input C
 		CountryCode:            countryCode,
 		RollbackTargetRevision: currentRevision,
 		SubscriptionInputs:     subscriptionInputs,
-	})
+	}, r.reality)
 	if err := configrender.ValidateVLESSRealityPayload(payload); err != nil {
 		return ConfigRevision{}, fmt.Errorf("%w: %v", ErrInvalidNodeTransition, err)
 	}

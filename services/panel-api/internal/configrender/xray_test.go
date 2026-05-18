@@ -62,6 +62,35 @@ func TestRenderVLESSRealityPayloadPassesValidation(t *testing.T) {
 	}
 }
 
+func TestRenderVLESSRealityPayloadWithRealityOverridesEndpoint(t *testing.T) {
+	payload := RenderVLESSRealityPayloadWithReality(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+	}, RealityConfig{
+		VLESSPort:  8443,
+		SNI:        "example.com",
+		Dest:       "example.com:443",
+		ShortID:    "abcd1234",
+		PrivateKey: "private-key",
+	})
+
+	config := payload["config"].(map[string]any)
+	inbound := config["inbounds"].([]any)[0].(map[string]any)
+	if inbound["port"] != 8443 {
+		t.Fatalf("expected custom port, got %#v", inbound["port"])
+	}
+	streamSettings := inbound["streamSettings"].(map[string]any)
+	realitySettings := streamSettings["realitySettings"].(map[string]any)
+	if realitySettings["dest"] != "example.com:443" || realitySettings["privateKey"] != "private-key" {
+		t.Fatalf("unexpected reality settings: %#v", realitySettings)
+	}
+	serverNames := realitySettings["serverNames"].([]any)
+	shortIDs := realitySettings["shortIds"].([]any)
+	if len(serverNames) != 1 || serverNames[0] != "example.com" || len(shortIDs) != 1 || shortIDs[0] != "abcd1234" {
+		t.Fatalf("unexpected reality identity fields: %#v", realitySettings)
+	}
+}
+
 func TestValidateVLESSRealityPayloadRejectsBrokenRoutingReference(t *testing.T) {
 	payload := RenderVLESSRealityPayload(RenderInput{NodeID: "node-1", RevisionNumber: 7})
 	config := payload["config"].(map[string]any)

@@ -7,6 +7,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/lenker/lenker/services/panel-api/internal/admins"
+	"github.com/lenker/lenker/services/panel-api/internal/configrender"
 )
 
 var ErrNotFound = errors.New("storage resource not found")
@@ -14,6 +15,7 @@ var ErrNotFound = errors.New("storage resource not found")
 type Config struct {
 	DatabaseURL string
 	Ping        bool
+	Reality     configrender.RealityConfig
 }
 
 type Store struct {
@@ -43,8 +45,8 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 		admins:        NewAdminsRepository(db),
 		users:         NewUsersRepository(db),
 		plans:         NewPlansRepository(db),
-		subscriptions: NewSubscriptionsRepository(db),
-		nodes:         NewNodesRepository(db),
+		subscriptions: NewSubscriptionsRepositoryWithReality(db, cfg.Reality),
+		nodes:         NewNodesRepositoryWithReality(db, cfg.Reality),
 	}, nil
 }
 

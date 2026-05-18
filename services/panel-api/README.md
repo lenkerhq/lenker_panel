@@ -51,6 +51,14 @@ Configuration:
 - `LENKER_SHUTDOWN_TIMEOUT_SECONDS`
 - `LENKER_DATABASE_URL`
 - `LENKER_DATABASE_PING`
+- `LENKER_VLESS_PORT`
+- `LENKER_REALITY_SNI`
+- `LENKER_REALITY_DEST`
+- `LENKER_REALITY_SHORT_ID`
+- `LENKER_REALITY_PRIVATE_KEY`
+- `LENKER_REALITY_PUBLIC_KEY`
+- `LENKER_REALITY_FINGERPRINT`
+- `LENKER_REALITY_SPIDER_X`
 
 Implemented foundation routes:
 
@@ -136,6 +144,10 @@ Subscription access export:
 - `GET /api/v1/subscriptions/{id}/access` is admin-only.
 - It returns a deterministic `subscription_access.v1alpha1` object and VLESS URI
   for the single MVP `VLESS + Reality + XTLS Vision` path.
+- VLESS/Reality endpoint values come from panel-api runtime config
+  (`LENKER_VLESS_PORT`, `LENKER_REALITY_*`) and are used consistently for
+  signed config revisions and subscription access exports. Dev defaults remain
+  placeholders and must be overridden for a real node.
 - The access token lifecycle is one active token per subscription.
 - `GET /api/v1/subscriptions/{id}/access-token` returns read-only lifecycle
   status (`never_issued`, `active`, or `revoked`) plus timestamps and generation

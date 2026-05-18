@@ -158,7 +158,8 @@ var (
 )
 
 type subscriptionsRepository struct {
-	db *sql.DB
+	db      *sql.DB
+	reality configrender.RealityConfig
 }
 
 const createSubscriptionSQL = `
@@ -183,7 +184,11 @@ const createSubscriptionSQL = `
 `
 
 func NewSubscriptionsRepository(db *sql.DB) SubscriptionsRepository {
-	return &subscriptionsRepository{db: db}
+	return NewSubscriptionsRepositoryWithReality(db, configrender.DefaultRealityConfig())
+}
+
+func NewSubscriptionsRepositoryWithReality(db *sql.DB, reality configrender.RealityConfig) SubscriptionsRepository {
+	return &subscriptionsRepository{db: db, reality: reality.WithDefaults()}
 }
 
 func (r *subscriptionsRepository) List(ctx context.Context) ([]Subscription, error) {
@@ -398,16 +403,17 @@ func (r *subscriptionsRepository) Access(ctx context.Context, id string) (Subscr
 		DrainState:     row.drainState.String,
 		ActiveRevision: int(row.activeRev.Int64),
 	}
+	reality := r.reality.WithDefaults()
 	endpoint := SubscriptionAccessEndpoint{
 		Address:     node.Hostname,
-		Port:        configrender.DefaultVLESSPort,
+		Port:        reality.VLESSPort,
 		Network:     "tcp",
 		Security:    "reality",
-		SNI:         configrender.DefaultRealitySNI,
-		PublicKey:   configrender.DefaultRealityPublic,
-		ShortID:     configrender.DefaultRealityShortID,
-		Fingerprint: configrender.DefaultFingerprint,
-		SpiderX:     configrender.DefaultSpiderX,
+		SNI:         reality.SNI,
+		PublicKey:   reality.PublicKey,
+		ShortID:     reality.ShortID,
+		Fingerprint: reality.Fingerprint,
+		SpiderX:     reality.SpiderX,
 	}
 	userLabel := row.userEmail
 	if strings.TrimSpace(row.displayName) != "" {

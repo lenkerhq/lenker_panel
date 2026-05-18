@@ -1,6 +1,6 @@
 import type { StoredSession } from "./session";
 
-const DEFAULT_API_BASE_URL = "http://localhost:8080";
+const DEFAULT_API_BASE_URL = import.meta.env.DEV ? "http://localhost:8080" : "/panel-api";
 
 interface LoginResponse {
   data: StoredSession;

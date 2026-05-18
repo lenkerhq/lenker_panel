@@ -29,6 +29,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	store, err := storage.Open(ctx, storage.Config{
 		DatabaseURL: cfg.DatabaseURL,
 		Ping:        cfg.DatabasePing,
+		Reality:     cfg.Reality,
 	})
 	if err != nil {
 		return err
