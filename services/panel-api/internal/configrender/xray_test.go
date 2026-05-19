@@ -177,3 +177,73 @@ func mustJSON(t *testing.T, value any) string {
 	}
 	return string(body)
 }
+
+func TestRenderVLESSRealityPayloadWithRoutingRules(t *testing.T) {
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+		RoutingRules: []RoutingRuleInput{
+			{RuleType: "geosite", Target: "category-ads", Action: "block"},
+			{RuleType: "domain", Target: "blocked.com", Action: "block"},
+			{RuleType: "geoip", Target: "cn", Action: "direct"},
+		},
+	})
+
+	if err := ValidateVLESSRealityPayload(payload); err != nil {
+		t.Fatalf("expected valid payload with routing rules: %v", err)
+	}
+
+	config := payload["config"].(map[string]any)
+
+	// Should have 2 outbounds: direct + block
+	outbounds := config["outbounds"].([]any)
+	if len(outbounds) != 2 {
+		t.Fatalf("expected 2 outbounds, got %d", len(outbounds))
+	}
+	blockOutbound := outbounds[1].(map[string]any)
+	if blockOutbound["tag"] != "block" || blockOutbound["protocol"] != "blackhole" {
+		t.Fatalf("expected block/blackhole outbound, got %v", blockOutbound)
+	}
+
+	// Should have 4 routing rules: 3 custom + 1 default catch-all
+	routing := config["routing"].(map[string]any)
+	rules := routing["rules"].([]any)
+	if len(rules) != 4 {
+		t.Fatalf("expected 4 routing rules, got %d", len(rules))
+	}
+
+	// First rule should be geosite block
+	firstRule := rules[0].(map[string]any)
+	if firstRule["outboundTag"] != "block" {
+		t.Fatalf("expected first rule outbound=block, got %v", firstRule["outboundTag"])
+	}
+	domains := firstRule["domain"].([]any)
+	if len(domains) != 1 || domains[0] != "geosite:category-ads" {
+		t.Fatalf("unexpected domain in first rule: %v", domains)
+	}
+
+	// Last rule should be the default catch-all
+	lastRule := rules[3].(map[string]any)
+	if lastRule["outboundTag"] != "direct" {
+		t.Fatalf("expected last rule to be default catch-all with outbound=direct")
+	}
+}
+
+func TestRenderVLESSRealityPayloadNoRoutingRulesStaysDefault(t *testing.T) {
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+	})
+
+	config := payload["config"].(map[string]any)
+	outbounds := config["outbounds"].([]any)
+	if len(outbounds) != 1 {
+		t.Fatalf("expected 1 outbound when no routing rules, got %d", len(outbounds))
+	}
+
+	routing := config["routing"].(map[string]any)
+	rules := routing["rules"].([]any)
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 routing rule (default), got %d", len(rules))
+	}
+}

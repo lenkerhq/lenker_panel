@@ -210,6 +210,9 @@ func validateOutbounds(outbounds []any) (map[string]bool, error) {
 		if !ok {
 			return nil, invalidXrayConfig("missing_outbound_protocol")
 		}
+		if protocol != "freedom" && protocol != "blackhole" {
+			return nil, invalidXrayConfig("unsupported_outbound_protocol")
+		}
 		tags[tag] = true
 		if tag == "direct" && protocol == "freedom" {
 			hasDirectFreedom = true
@@ -238,13 +241,16 @@ func validateRouting(routing map[string]any, inboundTags map[string]bool, outbou
 		if !ok || !outboundTags[outboundTag] {
 			return invalidXrayConfig("invalid_routing_outbound_reference")
 		}
-		rawInboundTags, ok := stringArray(rule["inboundTag"])
-		if !ok || len(rawInboundTags) == 0 {
-			return invalidXrayConfig("invalid_routing_inbound_reference")
-		}
-		for _, inboundTag := range rawInboundTags {
-			if !inboundTags[inboundTag] {
+		// inboundTag is optional for custom routing rules (domain/ip/port matching).
+		if rawInboundTags, ok := rule["inboundTag"]; ok {
+			tags, ok := stringArray(rawInboundTags)
+			if !ok {
 				return invalidXrayConfig("invalid_routing_inbound_reference")
+			}
+			for _, inboundTag := range tags {
+				if !inboundTags[inboundTag] {
+					return invalidXrayConfig("invalid_routing_inbound_reference")
+				}
 			}
 		}
 	}

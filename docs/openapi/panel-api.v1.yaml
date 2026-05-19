@@ -1218,6 +1218,195 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/routing-rules/global:
+    get:
+      tags: [Routing]
+      summary: List global routing rules
+      responses:
+        "200":
+          description: Global routing rules.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Routing]
+      summary: Create a global routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoutingRuleRequest"
+      responses:
+        "201":
+          description: Routing rule created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/routing-rules/global/{rule_id}:
+    parameters:
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Routing]
+      summary: Update a global routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoutingRuleRequest"
+      responses:
+        "200":
+          description: Routing rule updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Routing]
+      summary: Delete a global routing rule
+      responses:
+        "200":
+          description: Routing rule deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/nodes/{id}/routing-rules:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Routing]
+      summary: List routing rules for a node (includes inherited globals)
+      responses:
+        "200":
+          description: Node routing rules.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Routing]
+      summary: Create a per-node routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoutingRuleRequest"
+      responses:
+        "201":
+          description: Routing rule created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/nodes/{id}/routing-rules/{rule_id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: rule_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [Routing]
+      summary: Update a per-node routing rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoutingRuleRequest"
+      responses:
+        "200":
+          description: Routing rule updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutingRuleEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Routing]
+      summary: Delete a per-node routing rule
+      responses:
+        "200":
+          description: Routing rule deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/nodes/{id}/routing-rules/reorder:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Routing]
+      summary: Reorder routing rules for a node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/RoutingRuleReorderEntry"
+              minItems: 1
+      responses:
+        "200":
+          description: Rules reordered.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/client/devices/register:
     post:
       tags: [Devices]
@@ -2778,6 +2967,108 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/TrafficReportResult"
+    RoutingRule:
+      type: object
+      required: [id, rule_type, target, action, priority, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        node_id:
+          type: string
+          format: uuid
+          nullable: true
+        rule_type:
+          type: string
+          enum: [geosite, geoip, domain, ip, port, protocol]
+        target:
+          type: string
+        action:
+          type: string
+          enum: [block, proxy, direct, warp]
+        outbound_tag:
+          type: string
+          nullable: true
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RoutingRuleEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/RoutingRule"
+    RoutingRuleListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/RoutingRule"
+    CreateRoutingRuleRequest:
+      type: object
+      required: [rule_type, target, action]
+      properties:
+        rule_type:
+          type: string
+          enum: [geosite, geoip, domain, ip, port, protocol]
+        target:
+          type: string
+        action:
+          type: string
+          enum: [block, proxy, direct, warp]
+        outbound_tag:
+          type: string
+        priority:
+          type: integer
+          default: 100
+        enabled:
+          type: boolean
+          default: true
+        description:
+          type: string
+    UpdateRoutingRuleRequest:
+      type: object
+      properties:
+        rule_type:
+          type: string
+          enum: [geosite, geoip, domain, ip, port, protocol]
+        target:
+          type: string
+        action:
+          type: string
+          enum: [block, proxy, direct, warp]
+        outbound_tag:
+          type: string
+        priority:
+          type: integer
+        enabled:
+          type: boolean
+        description:
+          type: string
+    RoutingRuleReorderEntry:
+      type: object
+      required: [id, priority]
+      properties:
+        id:
+          type: string
+          format: uuid
+        priority:
+          type: integer
+          minimum: 1
     ClientDeviceRegisterRequest:
       type: object
       required: [device_fingerprint]

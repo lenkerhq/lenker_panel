@@ -89,7 +89,15 @@ type RenderInput struct {
 	Region                 string
 	CountryCode            string
 	SubscriptionInputs     []SubscriptionInput
+	RoutingRules           []RoutingRuleInput
 	RollbackTargetRevision int
+}
+
+// RoutingRuleInput represents a routing rule to be rendered into the Xray config.
+type RoutingRuleInput struct {
+	RuleType string // geosite, geoip, domain, ip, port, protocol
+	Target   string
+	Action   string // block, proxy, direct, warp
 }
 
 type SubscriptionInput struct {
@@ -136,6 +144,42 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 	subscriptionInputs := sortedSubscriptionInputs(input.SubscriptionInputs)
 	accessEntries := renderAccessEntries(subscriptionInputs)
 	subscriptionSummary := renderSubscriptionSummary(subscriptionInputs)
+
+	outbounds := []any{
+		map[string]any{
+			"tag":      outboundTag,
+			"protocol": "freedom",
+		},
+	}
+
+	// Determine if we need a blackhole outbound for block rules.
+	needsBlock := false
+	for _, rule := range input.RoutingRules {
+		if rule.Action == "block" {
+			needsBlock = true
+			break
+		}
+	}
+	if needsBlock {
+		outbounds = append(outbounds, map[string]any{
+			"tag":      "block",
+			"protocol": "blackhole",
+		})
+	}
+
+	// Build custom routing rules before the default catch-all.
+	customRules := renderCustomRoutingRules(input.RoutingRules, inboundTag)
+
+	// Default catch-all rule.
+	defaultRule := map[string]any{
+		"type":        "field",
+		"inboundTag":  []any{inboundTag},
+		"outboundTag": outboundTag,
+	}
+
+	allRules := make([]any, 0, len(customRules)+1)
+	allRules = append(allRules, customRules...)
+	allRules = append(allRules, defaultRule)
 
 	return map[string]any{
 		"schema_version":           SchemaVersion,
@@ -212,21 +256,10 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 					},
 				},
 			},
-			"outbounds": []any{
-				map[string]any{
-					"tag":      outboundTag,
-					"protocol": "freedom",
-				},
-			},
+			"outbounds": outbounds,
 			"routing": map[string]any{
 				"domainStrategy": "AsIs",
-				"rules": []any{
-					map[string]any{
-						"type":        "field",
-						"inboundTag":  []any{inboundTag},
-						"outboundTag": outboundTag,
-					},
-				},
+				"rules":          allRules,
 			},
 		},
 		"subscription_inputs": subscriptionSummary,
@@ -366,4 +399,48 @@ func renderClients(accessEntries []any) []any {
 		})
 	}
 	return result
+}
+
+func renderCustomRoutingRules(rules []RoutingRuleInput, inboundTag string) []any {
+	var result []any
+	for _, rule := range rules {
+		outbound := actionToOutbound(rule.Action)
+		xrayRule := map[string]any{
+			"type":        "field",
+			"outboundTag": outbound,
+			"inboundTag":  []any{inboundTag},
+		}
+		switch rule.RuleType {
+		case "domain":
+			xrayRule["domain"] = []any{rule.Target}
+		case "geosite":
+			xrayRule["domain"] = []any{"geosite:" + rule.Target}
+		case "geoip":
+			xrayRule["ip"] = []any{"geoip:" + rule.Target}
+		case "ip":
+			xrayRule["ip"] = []any{rule.Target}
+		case "port":
+			xrayRule["port"] = rule.Target
+		case "protocol":
+			xrayRule["protocol"] = []any{rule.Target}
+		default:
+			continue
+		}
+		result = append(result, xrayRule)
+	}
+	return result
+}
+
+func actionToOutbound(action string) string {
+	switch action {
+	case "block":
+		return "block"
+	case "direct", "warp":
+		// warp falls back to direct until WARP integration is implemented
+		return "direct"
+	case "proxy":
+		return "direct"
+	default:
+		return "direct"
+	}
 }

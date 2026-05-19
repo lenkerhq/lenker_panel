@@ -23,6 +23,7 @@ import (
 	"github.com/lenker/lenker/services/panel-api/internal/subscriptions"
 	"github.com/lenker/lenker/services/panel-api/internal/traffic"
 	"github.com/lenker/lenker/services/panel-api/internal/users"
+	"github.com/lenker/lenker/services/panel-api/internal/routing"
 )
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -46,6 +47,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 	devicesSvc := devices.NewService(devicesRepo, store.Subscriptions())
 	trafficRepo := traffic.NewPostgresRepository(store.DB())
 	trafficSvc := traffic.NewService(trafficRepo).WithNodeResolver(traffic.NewPostgresNodeResolver(store.DB()))
+	routingRepo := routing.NewPostgresRepository(store.DB())
+	routingSvc := routing.NewService(routingRepo)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
@@ -58,6 +61,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Audit:         audit.NewHandler(logger, auditRecorder, adminSession.RequireAdmin),
 		Devices:       devices.NewHandler(logger, devicesRepo, devicesSvc, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Traffic:       handlers.NewTrafficHandler(logger, trafficSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Routing:       routing.NewHandler(logger, routingSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 	})
 
 	server := &http.Server{

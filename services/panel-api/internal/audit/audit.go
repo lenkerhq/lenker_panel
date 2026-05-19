@@ -251,6 +251,11 @@ const (
 	ActionTrafficQuotaSet   = "traffic.quota.set"
 	ActionTrafficQuotaReset = "traffic.quota.reset"
 
+	ActionRoutingRuleCreate  = "routing_rule.create"
+	ActionRoutingRuleUpdate  = "routing_rule.update"
+	ActionRoutingRuleDelete  = "routing_rule.delete"
+	ActionRoutingRuleReorder = "routing_rule.reorder"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )
