@@ -37,6 +37,7 @@ EXPECTED_OPERATIONS = {
   "/api/v1/nodes/register" => %w[post],
   "/api/v1/nodes/{id}" => %w[get],
   "/api/v1/nodes/{id}/traffic" => %w[get],
+  "/api/v1/traffic/report" => %w[post],
   "/api/v1/nodes/{id}/config-revisions" => %w[get post],
   "/api/v1/nodes/{id}/config-revisions/pending" => %w[get],
   "/api/v1/nodes/{id}/config-revisions/{revisionId}/rollback" => %w[post],
