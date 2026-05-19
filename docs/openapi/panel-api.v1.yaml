@@ -1187,6 +1187,37 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/traffic/report:
+    post:
+      tags: [Traffic]
+      summary: Report traffic from a node agent
+      description: |
+        Accepts a batch of traffic records from a node agent. Auth via Bearer node token.
+        Each entry maps a subscription (and optionally a device) to bytes uploaded and downloaded.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/TrafficReportItem"
+              minItems: 1
+      responses:
+        "200":
+          description: Traffic report accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficReportResultEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/client/devices/register:
     post:
       tags: [Devices]
@@ -2696,6 +2727,57 @@ components:
           type: string
           format: date-time
           nullable: true
+    TrafficReportItem:
+      type: object
+      required: [subscription_id, bytes_up, bytes_down]
+      properties:
+        subscription_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+        bytes_up:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_down:
+          type: integer
+          format: int64
+          minimum: 0
+    TrafficReportResult:
+      type: object
+      required: [node_id, accepted, bytes_up, bytes_down, bytes_total, reported_at]
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        accepted:
+          type: integer
+          minimum: 0
+        bytes_up:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_down:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_total:
+          type: integer
+          format: int64
+          minimum: 0
+        reported_at:
+          type: string
+          format: date-time
+    TrafficReportResultEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/TrafficReportResult"
     ClientDeviceRegisterRequest:
       type: object
       required: [device_fingerprint]

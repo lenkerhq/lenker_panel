@@ -7,11 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -227,7 +228,7 @@ func TestValidateAndStoreConfigRevisionRejectsInvalidSignature(t *testing.T) {
 
 func TestFetchPendingConfigRevisionBuildsBearerRequest(t *testing.T) {
 	expected := signedTestConfigRevision(t, "node-1", 3, 2)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodGet {
 			t.Fatalf("expected GET, got %s", r.Method)
 		}
@@ -237,12 +238,16 @@ func TestFetchPendingConfigRevisionBuildsBearerRequest(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer node-token" {
 			t.Fatalf("unexpected authorization header")
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": expected})
-	}))
-	defer server.Close()
+		body, _ := json.Marshal(map[string]any{"data": expected})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+		}, nil
+	})}
 
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	revision, ok, err := client.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: client}
+	revision, ok, err := panelClient.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
 	if err != nil {
 		t.Fatalf("expected revision: %v", err)
 	}
@@ -253,7 +258,7 @@ func TestFetchPendingConfigRevisionBuildsBearerRequest(t *testing.T) {
 
 func TestReportConfigRevisionBuildsBearerRequest(t *testing.T) {
 	var decodedReport ConfigRevisionReport
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
@@ -266,12 +271,16 @@ func TestReportConfigRevisionBuildsBearerRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&decodedReport); err != nil {
 			t.Fatalf("expected report json: %v", err)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"status": "applied"}})
-	}))
-	defer server.Close()
+		body, _ := json.Marshal(map[string]any{"data": map[string]any{"status": "applied"}})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+		}, nil
+	})}
 
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	err := client.ReportConfigRevision(context.Background(), "node-1", "node-token", "revision-1", ConfigRevisionReport{
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: client}
+	err := panelClient.ReportConfigRevision(context.Background(), "node-1", "node-token", "revision-1", ConfigRevisionReport{
 		Status:         "applied",
 		ActiveRevision: 4,
 		RuntimeEvents: []RuntimeEvent{{
@@ -294,7 +303,7 @@ func TestReportConfigRevisionBuildsBearerRequest(t *testing.T) {
 func TestSendHeartbeatBuildsBearerRequest(t *testing.T) {
 	now := time.Date(2026, 5, 18, 1, 2, 3, 0, time.UTC)
 	var decodedHeartbeat HeartbeatPayload
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Method != http.MethodPost {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
@@ -307,12 +316,16 @@ func TestSendHeartbeatBuildsBearerRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&decodedHeartbeat); err != nil {
 			t.Fatalf("expected heartbeat json: %v", err)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"status": "active"}})
-	}))
-	defer server.Close()
+		body, _ := json.Marshal(map[string]any{"data": map[string]any{"status": "active"}})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(string(body))),
+		}, nil
+	})}
 
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	err := client.SendHeartbeat(context.Background(), "node-1", "node-token", HeartbeatPayload{
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: client}
+	err := panelClient.SendHeartbeat(context.Background(), "node-1", "node-token", HeartbeatPayload{
 		NodeID:               "node-1",
 		AgentVersion:         AgentVersion,
 		Status:               StatusActive,
@@ -339,13 +352,14 @@ func TestSendHeartbeatBuildsBearerRequest(t *testing.T) {
 }
 
 func TestFetchPendingConfigRevisionNoPending(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
-	}))
-	defer server.Close()
-
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	_, ok, err := client.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"not_found"}`)),
+		}, nil
+	})}}
+	_, ok, err := panelClient.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
 	if err != nil {
 		t.Fatalf("expected no-op, got %v", err)
 	}
@@ -355,26 +369,28 @@ func TestFetchPendingConfigRevisionNoPending(t *testing.T) {
 }
 
 func TestFetchPendingConfigRevisionUnauthorized(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	_, _, err := client.FetchPendingConfigRevision(context.Background(), "node-1", "bad-token")
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusUnauthorized,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":"unauthorized"}`)),
+		}, nil
+	})}}
+	_, _, err := panelClient.FetchPendingConfigRevision(context.Background(), "node-1", "bad-token")
 	if !errors.Is(err, ErrPendingRevisionAuth) {
 		t.Fatalf("expected auth error, got %v", err)
 	}
 }
 
 func TestFetchPendingConfigRevisionMalformedResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":`))
-	}))
-	defer server.Close()
-
-	client := PanelClient{BaseURL: server.URL, HTTPClient: server.Client()}
-	_, _, err := client.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
+	panelClient := PanelClient{BaseURL: "http://panel.example.com", HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":`)),
+		}, nil
+	})}}
+	_, _, err := panelClient.FetchPendingConfigRevision(context.Background(), "node-1", "node-token")
 	if !errors.Is(err, ErrUnexpectedPanelResponse) {
 		t.Fatalf("expected malformed response error, got %v", err)
 	}
@@ -1449,4 +1465,10 @@ func copyExecutableFixture(t *testing.T, source string) string {
 		t.Fatalf("expected executable fixture copy: %v", err)
 	}
 	return path
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

@@ -8,15 +8,19 @@ import {
   getSubscriptionAccess,
   getSubscriptionHandoffInviteStatus,
   getSubscriptionAccessTokenStatus,
+  getSubscriptionQuota,
+  getSubscriptionTraffic,
   listPlans,
   listSubscriptionDevices,
   listSubscriptions,
   listUsers,
   PanelApiError,
   renewSubscription,
+  resetSubscriptionQuota,
   revokeSubscriptionHandoffInvite,
   revokeSubscriptionAccessToken,
   rotateSubscriptionAccessToken,
+  setSubscriptionQuota,
   updateSubscription,
   type Device,
   type Plan,
@@ -26,6 +30,8 @@ import {
   type SubscriptionHandoffInviteStatus,
   type SubscriptionAccessToken,
   type SubscriptionAccessTokenStatus,
+  type TrafficQuota,
+  type TrafficUsage,
   type User,
 } from "../lib/api";
 import type { StoredSession } from "../lib/session";
@@ -802,6 +808,10 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
       {subscriptionAccess ? (
         <DevicesSection session={session} subscriptionID={subscriptionAccess.subscription_id} deviceLimit={editingSubscription?.device_limit ?? subscriptions.find(s => s.id === subscriptionAccess.subscription_id)?.device_limit ?? 0} onUnauthorized={onUnauthorized} />
       ) : null}
+
+      {subscriptionAccess ? (
+        <TrafficSection session={session} subscriptionID={subscriptionAccess.subscription_id} onUnauthorized={onUnauthorized} />
+      ) : null}
     </div>
   );
 }
@@ -1038,4 +1048,155 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
       ) : null}
     </section>
   );
+}
+
+// --- Traffic section ---
+
+interface TrafficSectionProps {
+  session: StoredSession;
+  subscriptionID: string;
+  onUnauthorized: () => void;
+}
+
+function TrafficSection({ session, subscriptionID, onUnauthorized }: TrafficSectionProps) {
+  const [usage, setUsage] = useState<TrafficUsage | null>(null);
+  const [quota, setQuota] = useState<TrafficQuota | null>(null);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
+  const [isMutating, setIsMutating] = useState(false);
+  const [quotaLimitInput, setQuotaLimitInput] = useState("");
+  const [showQuotaForm, setShowQuotaForm] = useState(false);
+
+  const loadTraffic = useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const [usageResult, quotaResult] = await Promise.all([
+        getSubscriptionTraffic(session, subscriptionID),
+        getSubscriptionQuota(session, subscriptionID).catch(() => null),
+      ]);
+      setUsage(usageResult);
+      setQuota(quotaResult);
+      setLoadState("loaded");
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setLoadState("failed");
+    }
+  }, [session, subscriptionID, onUnauthorized]);
+
+  useEffect(() => {
+    loadTraffic();
+  }, [loadTraffic]);
+
+  const handleSetQuota = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsMutating(true);
+    try {
+      const limitBytes = quotaLimitInput.trim() === "" ? null : parseInt(quotaLimitInput, 10) * 1024 * 1024 * 1024;
+      const result = await setSubscriptionQuota(session, subscriptionID, { bytes_limit: limitBytes });
+      setQuota(result);
+      setShowQuotaForm(false);
+      setQuotaLimitInput("");
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+      }
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  const handleResetQuota = async () => {
+    setIsMutating(true);
+    try {
+      const result = await resetSubscriptionQuota(session, subscriptionID);
+      setQuota(result);
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+      }
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
+  return (
+    <section className="management-panel">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Traffic</p>
+          {usage ? (
+            <h4>↑ {formatBytes(usage.bytes_up)} / ↓ {formatBytes(usage.bytes_down)} / Total {formatBytes(usage.bytes_total)}</h4>
+          ) : (
+            <h4>—</h4>
+          )}
+        </div>
+        <div className="row-actions">
+          <button className="table-button" type="button" onClick={() => setShowQuotaForm(!showQuotaForm)} disabled={isMutating}>
+            Set Quota
+          </button>
+          <button className="table-button" type="button" onClick={handleResetQuota} disabled={isMutating}>
+            Reset Usage
+          </button>
+        </div>
+      </div>
+
+      {loadState === "loading" ? <p className="state-text">Loading traffic...</p> : null}
+      {loadState === "failed" ? <p className="state-text">Failed to load traffic data.</p> : null}
+
+      {quota ? (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Used</th>
+                <th>Limit</th>
+                <th>Remaining</th>
+                <th>Exceeded</th>
+                <th>Reset at</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{formatBytes(quota.bytes_used)}</td>
+                <td>{quota.bytes_limit !== null ? formatBytes(quota.bytes_limit) : "unlimited"}</td>
+                <td>{quota.bytes_remaining !== null ? formatBytes(quota.bytes_remaining) : "—"}</td>
+                <td>{quota.exceeded ? "yes" : "no"}</td>
+                <td>{quota.reset_at ? formatDate(quota.reset_at) : "—"}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {showQuotaForm ? (
+        <form onSubmit={handleSetQuota} className="inline-form">
+          <label className="field-label" htmlFor="quota-limit-gb">
+            Limit (GB, empty = unlimited)
+          </label>
+          <input
+            id="quota-limit-gb"
+            type="number"
+            min="0"
+            step="1"
+            value={quotaLimitInput}
+            onChange={(e) => setQuotaLimitInput(e.target.value)}
+            placeholder="e.g. 100"
+          />
+          <button className="table-button" type="submit" disabled={isMutating}>
+            Save
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }

@@ -24,6 +24,7 @@ Current foundation:
 - agent identity, registration payload, heartbeat payload, status, config revision, and rollback placeholder models
 - registration and heartbeat request builders
 - periodic heartbeat sender when panel URL, node id, and node token are configured
+- periodic traffic report sender when panel URL, node id, and node token are configured
 - signed config revision validation with in-memory metadata storage and local config artifact serialization
 - config revision tracking and rollback planning skeleton
 - no-process runtime supervisor skeleton state around validated active config artifacts
@@ -39,7 +40,9 @@ Configuration:
 - `LENKER_AGENT_LOG_LEVEL`
 - `LENKER_AGENT_HEARTBEAT_INTERVAL`
 - `LENKER_AGENT_CONFIG_POLL_INTERVAL`
+- `LENKER_AGENT_TRAFFIC_REPORT_INTERVAL`
 - `LENKER_AGENT_XRAY_BIN`
+- `LENKER_AGENT_XRAY_API_ADDRESS`
 - `LENKER_AGENT_RUNTIME_PROCESS_MODE`
 - `LENKER_AGENT_TLS_ENABLED`
 

@@ -7,6 +7,7 @@ import {
   enableNode,
   getNode,
   getNodeConfigRevision,
+  getNodeTraffic,
   listNodeConfigRevisions,
   listNodes,
   PanelApiError,
@@ -16,6 +17,7 @@ import {
   type Node,
   type NodeBootstrapToken,
   type NodeSummary,
+  type TrafficUsage,
 } from "../lib/api";
 import {
   buildCreateNodeBootstrapTokenInput,
@@ -606,6 +608,10 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
       ) : null}
 
       {selectedNode ? (
+        <NodeTrafficSection session={session} nodeID={selectedNode.id} onUnauthorized={onUnauthorized} />
+      ) : null}
+
+      {selectedNode ? (
         <section className="surface-card">
           <div className="section-heading">
             <div>
@@ -885,4 +891,61 @@ function readBundleNumber(bundle: unknown, key: string): string | null {
   }
   const value = (bundle as Record<string, unknown>)[key];
   return typeof value === "number" && Number.isFinite(value) ? String(value) : null;
+}
+
+// --- Node Traffic section ---
+
+interface NodeTrafficSectionProps {
+  session: StoredSession;
+  nodeID: string;
+  onUnauthorized: () => void;
+}
+
+function NodeTrafficSection({ session, nodeID, onUnauthorized }: NodeTrafficSectionProps) {
+  const [usage, setUsage] = useState<TrafficUsage | null>(null);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
+
+  const loadTraffic = useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const result = await getNodeTraffic(session, nodeID);
+      setUsage(result);
+      setLoadState("loaded");
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setLoadState("failed");
+    }
+  }, [session, nodeID, onUnauthorized]);
+
+  useEffect(() => {
+    loadTraffic();
+  }, [loadTraffic]);
+
+  return (
+    <section className="surface-card">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Traffic</p>
+          {usage ? (
+            <h3>↑ {formatNodeBytes(usage.bytes_up)} / ↓ {formatNodeBytes(usage.bytes_down)} / Total {formatNodeBytes(usage.bytes_total)}</h3>
+          ) : (
+            <h3>—</h3>
+          )}
+        </div>
+      </div>
+      {loadState === "loading" ? <p className="state-text">Loading traffic...</p> : null}
+      {loadState === "failed" ? <p className="state-text">Failed to load traffic data.</p> : null}
+    </section>
+  );
+}
+
+function formatNodeBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }

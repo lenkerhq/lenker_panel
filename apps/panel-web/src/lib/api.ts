@@ -722,3 +722,83 @@ export async function deleteDevice(session: StoredSession, deviceID: string): Pr
 export async function deactivateDevice(session: StoredSession, deviceID: string): Promise<void> {
   await authorizedRequest(session, `/api/v1/devices/${encodeURIComponent(deviceID)}/deactivate`, { method: "POST" });
 }
+
+// --- Traffic ---
+
+export interface TrafficUsage {
+  resource_type: string;
+  resource_id: string;
+  bytes_up: number;
+  bytes_down: number;
+  bytes_total: number;
+  from: string | null;
+  to: string | null;
+}
+
+export interface TrafficQuota {
+  id: string;
+  subscription_id: string;
+  bytes_limit: number | null;
+  bytes_used: number;
+  bytes_remaining: number | null;
+  exceeded: boolean;
+  reset_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SetQuotaInput {
+  bytes_limit?: number | null;
+  bytes_used?: number;
+  reset_at?: string | null;
+}
+
+interface TrafficUsageResponse {
+  data: TrafficUsage;
+}
+
+interface TrafficQuotaResponse {
+  data: TrafficQuota;
+}
+
+export async function getSubscriptionTraffic(session: StoredSession, subscriptionID: string, from?: string, to?: string): Promise<TrafficUsage> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const payload = await authorizedRequest<TrafficUsageResponse>(session, `/api/v1/subscriptions/${encodeURIComponent(subscriptionID)}/traffic${qs}`);
+  return payload.data;
+}
+
+export async function getSubscriptionQuota(session: StoredSession, subscriptionID: string): Promise<TrafficQuota> {
+  const payload = await authorizedRequest<TrafficQuotaResponse>(session, `/api/v1/subscriptions/${encodeURIComponent(subscriptionID)}/quota`);
+  return payload.data;
+}
+
+export async function setSubscriptionQuota(session: StoredSession, subscriptionID: string, input: SetQuotaInput): Promise<TrafficQuota> {
+  const payload = await authorizedRequest<TrafficQuotaResponse>(session, `/api/v1/subscriptions/${encodeURIComponent(subscriptionID)}/quota`, { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function resetSubscriptionQuota(session: StoredSession, subscriptionID: string): Promise<TrafficQuota> {
+  const payload = await authorizedRequest<TrafficQuotaResponse>(session, `/api/v1/subscriptions/${encodeURIComponent(subscriptionID)}/quota/reset`, { method: "POST" });
+  return payload.data;
+}
+
+export async function getDeviceTraffic(session: StoredSession, deviceID: string, from?: string, to?: string): Promise<TrafficUsage> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const payload = await authorizedRequest<TrafficUsageResponse>(session, `/api/v1/devices/${encodeURIComponent(deviceID)}/traffic${qs}`);
+  return payload.data;
+}
+
+export async function getNodeTraffic(session: StoredSession, nodeID: string, from?: string, to?: string): Promise<TrafficUsage> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const payload = await authorizedRequest<TrafficUsageResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/traffic${qs}`);
+  return payload.data;
+}

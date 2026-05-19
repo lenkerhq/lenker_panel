@@ -13,6 +13,7 @@ import (
 	"github.com/lenker/lenker/services/node-agent/internal/agent"
 	"github.com/lenker/lenker/services/node-agent/internal/config"
 	httpapi "github.com/lenker/lenker/services/node-agent/internal/http"
+	"github.com/lenker/lenker/services/node-agent/internal/traffic"
 )
 
 func Run(ctx context.Context, cfg config.Config) error {
@@ -49,6 +50,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 	if cfg.PanelURL != "" && cfg.NodeID != "" && cfg.NodeToken != "" {
 		go runHeartbeatLoop(runCtx, logger, agentService, panelClient, cfg.HeartbeatInterval)
 		go runConfigPollingLoop(runCtx, logger, agentService, panelClient, cfg.ConfigPollInterval)
+		go runTrafficReportLoop(runCtx, logger, cfg)
 	} else {
 		logger.Info("panel sync disabled until panel url, node id, and node token are configured")
 	}
@@ -156,4 +158,49 @@ func newLogger(cfg config.Config) *slog.Logger {
 	}
 
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+}
+
+func runTrafficReportLoop(ctx context.Context, logger *slog.Logger, cfg config.Config) {
+	var collector traffic.Collector
+	if cfg.RuntimeProcessMode == "local" && cfg.XrayBin != "" {
+		collector = &traffic.XrayCollector{XrayBin: cfg.XrayBin, APIAddress: cfg.XrayAPIAddress}
+	} else {
+		collector = traffic.NoopCollector{}
+	}
+
+	reporter := &traffic.Reporter{PanelURL: cfg.PanelURL, NodeToken: cfg.NodeToken}
+
+	interval := cfg.TrafficReportInterval
+	if interval <= 0 {
+		interval = 60 * time.Second
+	}
+
+	report := func() {
+		records, err := collector.Collect(ctx)
+		if err != nil {
+			logger.Warn("traffic collect failed", "error", err)
+			return
+		}
+		if len(records) == 0 {
+			return
+		}
+		result, err := reporter.Report(ctx, records)
+		if err != nil {
+			logger.Warn("traffic report failed", "error", err)
+			return
+		}
+		logger.Debug("traffic reported", "accepted", result.Accepted, "bytes_total", result.BytesTotal)
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			report()
+		}
+	}
 }
