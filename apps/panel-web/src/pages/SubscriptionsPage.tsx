@@ -5,6 +5,7 @@ import {
   createSubscription,
   deactivateDevice,
   deleteDevice,
+  getDeviceTraffic,
   getSubscriptionAccess,
   getSubscriptionHandoffInviteStatus,
   getSubscriptionAccessTokenStatus,
@@ -934,6 +935,7 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
   const [devices, setDevices] = useState<Device[]>([]);
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
   const [actionID, setActionID] = useState<string | null>(null);
+  const [deviceTraffic, setDeviceTraffic] = useState<Record<string, TrafficUsage>>({});
 
   const loadDevices = useCallback(async () => {
     setLoadState("loading");
@@ -941,6 +943,12 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
       const result = await listSubscriptionDevices(session, subscriptionID);
       setDevices(result);
       setLoadState("loaded");
+      const trafficMap: Record<string, TrafficUsage> = {};
+      const results = await Promise.allSettled(result.map((d) => getDeviceTraffic(session, d.id)));
+      results.forEach((r, i) => {
+        if (r.status === "fulfilled") trafficMap[result[i].id] = r.value;
+      });
+      setDeviceTraffic(trafficMap);
     } catch (err) {
       if (err instanceof PanelApiError && err.status === 401) {
         onUnauthorized();
@@ -1006,6 +1014,7 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
                 <th>Platform</th>
                 <th>Last seen</th>
                 <th>IP</th>
+                <th>Traffic</th>
                 <th>Active</th>
                 <th>Actions</th>
               </tr>
@@ -1017,6 +1026,7 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
                   <td>{device.platform || "-"}</td>
                   <td>{formatDate(device.last_seen_at)}</td>
                   <td>{device.last_ip || "-"}</td>
+                  <td>{deviceTraffic[device.id] ? `↑${formatBytes(deviceTraffic[device.id].bytes_up)} ↓${formatBytes(deviceTraffic[device.id].bytes_down)}` : "—"}</td>
                   <td>{device.is_active ? "yes" : "no"}</td>
                   <td>
                     <div className="row-actions">
