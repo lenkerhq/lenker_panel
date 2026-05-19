@@ -15,11 +15,13 @@ import (
 	"github.com/lenker/lenker/services/panel-api/internal/auth"
 	"github.com/lenker/lenker/services/panel-api/internal/config"
 	"github.com/lenker/lenker/services/panel-api/internal/devices"
+	"github.com/lenker/lenker/services/panel-api/internal/handlers"
 	httpapi "github.com/lenker/lenker/services/panel-api/internal/http"
 	"github.com/lenker/lenker/services/panel-api/internal/nodes"
 	"github.com/lenker/lenker/services/panel-api/internal/plans"
 	"github.com/lenker/lenker/services/panel-api/internal/storage"
 	"github.com/lenker/lenker/services/panel-api/internal/subscriptions"
+	"github.com/lenker/lenker/services/panel-api/internal/traffic"
 	"github.com/lenker/lenker/services/panel-api/internal/users"
 )
 
@@ -42,6 +44,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 
 	devicesRepo := devices.NewPostgresRepository(store.DB())
 	devicesSvc := devices.NewService(devicesRepo, store.Subscriptions())
+	trafficRepo := traffic.NewPostgresRepository(store.DB())
+	trafficSvc := traffic.NewService(trafficRepo).WithNodeResolver(traffic.NewPostgresNodeResolver(store.DB()))
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
@@ -53,6 +57,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Nodes:         nodes.NewHandler(logger, store.Nodes(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Audit:         audit.NewHandler(logger, auditRecorder, adminSession.RequireAdmin),
 		Devices:       devices.NewHandler(logger, devicesRepo, devicesSvc, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Traffic:       handlers.NewTrafficHandler(logger, trafficSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 	})
 
 	server := &http.Server{

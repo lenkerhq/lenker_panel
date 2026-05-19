@@ -13,6 +13,7 @@ tags:
   - name: Plans
   - name: Subscriptions
   - name: Devices
+  - name: Traffic
   - name: Nodes
 security:
   - bearerAuth: []
@@ -964,6 +965,108 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/subscriptions/{id}/traffic:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Traffic]
+      summary: Get subscription traffic usage
+      description: Returns aggregated upload and download usage for a subscription over an optional RFC3339 period.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound for recorded_at.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound for recorded_at.
+      responses:
+        "200":
+          description: Subscription traffic usage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficUsageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/subscriptions/{id}/quota:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Traffic]
+      summary: Get subscription traffic quota
+      description: Returns current quota usage, optional limit, remaining bytes, and exceeded status.
+      responses:
+        "200":
+          description: Subscription traffic quota.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficQuotaEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Traffic]
+      summary: Set subscription traffic quota
+      description: Creates or updates a subscription quota and records an audit log entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetTrafficQuotaRequest"
+      responses:
+        "200":
+          description: Subscription traffic quota updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficQuotaEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/subscriptions/{id}/quota/reset:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Traffic]
+      summary: Reset subscription traffic quota usage
+      description: Sets bytes_used back to zero for a subscription quota and records an audit log entry.
+      responses:
+        "200":
+          description: Subscription traffic quota reset.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficQuotaEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/devices/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
@@ -995,6 +1098,43 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/devices/{id}/traffic:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Traffic]
+      summary: Get device traffic usage
+      description: Returns aggregated upload and download usage for a device over an optional RFC3339 period.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound for recorded_at.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound for recorded_at.
+      responses:
+        "200":
+          description: Device traffic usage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficUsageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/devices/{id}/deactivate:
     parameters:
       - $ref: "#/components/parameters/ID"
@@ -1004,6 +1144,43 @@ paths:
       responses:
         "200":
           description: Device deactivated.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/nodes/{id}/traffic:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Traffic]
+      summary: Get node traffic usage
+      description: Returns aggregated upload and download usage for a node over an optional RFC3339 period.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive lower bound for recorded_at.
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Inclusive upper bound for recorded_at.
+      responses:
+        "200":
+          description: Node traffic usage.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrafficUsageEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2386,6 +2563,139 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Device"
+    TrafficLog:
+      type: object
+      required: [id, subscription_id, node_id, bytes_up, bytes_down, bytes_total, recorded_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          format: uuid
+          nullable: true
+        node_id:
+          type: string
+          format: uuid
+        bytes_up:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_down:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_total:
+          type: integer
+          format: int64
+          minimum: 0
+        recorded_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    TrafficQuota:
+      type: object
+      required: [id, subscription_id, bytes_used, exceeded, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        bytes_limit:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        bytes_used:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_remaining:
+          type: integer
+          format: int64
+          minimum: 0
+          nullable: true
+        exceeded:
+          type: boolean
+        reset_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TrafficUsage:
+      type: object
+      required: [resource_type, resource_id, bytes_up, bytes_down, bytes_total]
+      properties:
+        resource_type:
+          type: string
+          enum: [subscription, device, node]
+        resource_id:
+          type: string
+          format: uuid
+        bytes_up:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_down:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes_total:
+          type: integer
+          format: int64
+          minimum: 0
+        from:
+          type: string
+          format: date-time
+          nullable: true
+        to:
+          type: string
+          format: date-time
+          nullable: true
+    TrafficQuotaEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/TrafficQuota"
+    TrafficUsageEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/TrafficUsage"
+    SetTrafficQuotaRequest:
+      type: object
+      properties:
+        bytes_limit:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: Null means unlimited traffic.
+        bytes_used:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Optional override for current used bytes. Omit to preserve current usage.
+        reset_at:
+          type: string
+          format: date-time
+          nullable: true
     ClientDeviceRegisterRequest:
       type: object
       required: [device_fingerprint]

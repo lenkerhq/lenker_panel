@@ -20,6 +20,7 @@ type RouterDeps struct {
 	Nodes         Handler
 	Audit         Handler
 	Devices       Handler
+	Traffic       Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -36,6 +37,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		deps.Nodes,
 		deps.Audit,
 		deps.Devices,
+		deps.Traffic,
 	} {
 		if handler != nil {
 			handler.RegisterRoutes(mux)

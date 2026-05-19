@@ -248,6 +248,9 @@ const (
 	ActionDeviceDelete     = "device.delete"
 	ActionDeviceDeactivate = "device.deactivate"
 
+	ActionTrafficQuotaSet   = "traffic.quota.set"
+	ActionTrafficQuotaReset = "traffic.quota.reset"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )
