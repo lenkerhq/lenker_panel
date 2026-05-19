@@ -247,3 +247,68 @@ func TestRenderVLESSRealityPayloadNoRoutingRulesStaysDefault(t *testing.T) {
 		t.Fatalf("expected 1 routing rule (default), got %d", len(rules))
 	}
 }
+
+func TestRenderVLESSRealityPayloadWithGlobalSettings(t *testing.T) {
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+		GlobalSettings: &GlobalSettingsInput{
+			LogLevel:   "debug",
+			Sniffing:   false,
+			DNSServers: []string{"9.9.9.9"},
+		},
+	})
+
+	if err := ValidateVLESSRealityPayload(payload); err != nil {
+		t.Fatalf("expected valid payload with global settings: %v", err)
+	}
+
+	config := payload["config"].(map[string]any)
+
+	// Log level should be debug
+	logSection := config["log"].(map[string]any)
+	if logSection["loglevel"] != "debug" {
+		t.Fatalf("expected loglevel=debug, got %v", logSection["loglevel"])
+	}
+
+	// Sniffing should be false
+	inbound := config["inbounds"].([]any)[0].(map[string]any)
+	sniffing := inbound["sniffing"].(map[string]any)
+	if sniffing["enabled"] != false {
+		t.Fatalf("expected sniffing.enabled=false, got %v", sniffing["enabled"])
+	}
+
+	// DNS should be present
+	dns, ok := config["dns"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected dns section in config")
+	}
+	servers := dns["servers"].([]any)
+	if len(servers) != 1 || servers[0] != "9.9.9.9" {
+		t.Fatalf("unexpected dns servers: %v", servers)
+	}
+}
+
+func TestRenderVLESSRealityPayloadNilGlobalSettingsUsesDefaults(t *testing.T) {
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+	})
+
+	config := payload["config"].(map[string]any)
+	logSection := config["log"].(map[string]any)
+	if logSection["loglevel"] != "warning" {
+		t.Fatalf("expected default loglevel=warning, got %v", logSection["loglevel"])
+	}
+
+	inbound := config["inbounds"].([]any)[0].(map[string]any)
+	sniffing := inbound["sniffing"].(map[string]any)
+	if sniffing["enabled"] != true {
+		t.Fatalf("expected default sniffing.enabled=true")
+	}
+
+	// No DNS section when no servers configured
+	if _, ok := config["dns"]; ok {
+		t.Fatalf("expected no dns section with nil GlobalSettings")
+	}
+}

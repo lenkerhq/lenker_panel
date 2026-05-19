@@ -256,6 +256,8 @@ const (
 	ActionRoutingRuleDelete  = "routing_rule.delete"
 	ActionRoutingRuleReorder = "routing_rule.reorder"
 
+	ActionSettingUpdate = "setting.update"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )

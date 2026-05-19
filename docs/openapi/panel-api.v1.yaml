@@ -1218,6 +1218,53 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/settings:
+    get:
+      tags: [Settings]
+      summary: List all global settings
+      description: Returns all supported settings with current values or defaults.
+      responses:
+        "200":
+          description: Global settings list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/settings/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Settings]
+      summary: Update a global setting
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingRequest"
+      responses:
+        "200":
+          description: Setting updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/routing-rules/global:
     get:
       tags: [Routing]
@@ -2967,6 +3014,44 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/TrafficReportResult"
+    GlobalSetting:
+      type: object
+      required: [key, value, updated_at]
+      properties:
+        key:
+          type: string
+        value: {}
+        description:
+          type: string
+          nullable: true
+        updated_by:
+          type: string
+          format: uuid
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    SettingEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/GlobalSetting"
+    SettingListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/GlobalSetting"
+    UpdateSettingRequest:
+      type: object
+      required: [value]
+      properties:
+        value: {}
     RoutingRule:
       type: object
       required: [id, rule_type, target, action, priority, enabled, created_at, updated_at]

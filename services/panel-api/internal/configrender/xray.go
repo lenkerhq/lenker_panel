@@ -90,7 +90,15 @@ type RenderInput struct {
 	CountryCode            string
 	SubscriptionInputs     []SubscriptionInput
 	RoutingRules           []RoutingRuleInput
+	GlobalSettings         *GlobalSettingsInput
 	RollbackTargetRevision int
+}
+
+// GlobalSettingsInput holds resolved global settings for config rendering.
+type GlobalSettingsInput struct {
+	LogLevel      string
+	Sniffing      bool
+	DNSServers    []string
 }
 
 // RoutingRuleInput represents a routing rule to be rendered into the Xray config.
@@ -145,6 +153,18 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 	accessEntries := renderAccessEntries(subscriptionInputs)
 	subscriptionSummary := renderSubscriptionSummary(subscriptionInputs)
 
+	// Resolve global settings with defaults.
+	logLevel := "warning"
+	sniffingEnabled := true
+	var dnsServers []string
+	if input.GlobalSettings != nil {
+		if input.GlobalSettings.LogLevel != "" {
+			logLevel = input.GlobalSettings.LogLevel
+		}
+		sniffingEnabled = input.GlobalSettings.Sniffing
+		dnsServers = input.GlobalSettings.DNSServers
+	}
+
 	outbounds := []any{
 		map[string]any{
 			"tag":      outboundTag,
@@ -181,6 +201,76 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 	allRules = append(allRules, customRules...)
 	allRules = append(allRules, defaultRule)
 
+	configMap := map[string]any{
+		"log": map[string]any{
+			"loglevel": logLevel,
+		},
+		"stats": map[string]any{},
+		"policy": map[string]any{
+			"levels": map[string]any{
+				"0": map[string]any{
+					"handshake":         4,
+					"connIdle":          300,
+					"uplinkOnly":        2,
+					"downlinkOnly":      5,
+					"statsUserUplink":   true,
+					"statsUserDownlink": true,
+				},
+			},
+			"system": map[string]any{
+				"statsInboundUplink":    true,
+				"statsInboundDownlink":  true,
+				"statsOutboundUplink":   true,
+				"statsOutboundDownlink": true,
+			},
+		},
+		"inbounds": []any{
+			map[string]any{
+				"tag":      inboundTag,
+				"listen":   "0.0.0.0",
+				"port":     reality.VLESSPort,
+				"protocol": "vless",
+				"settings": map[string]any{
+					"clients":    renderClients(accessEntries),
+					"decryption": "none",
+					"fallbacks":  []any{},
+				},
+				"streamSettings": map[string]any{
+					"network":  "tcp",
+					"security": "reality",
+					"realitySettings": map[string]any{
+						"show":         false,
+						"dest":         reality.Dest,
+						"xver":         0,
+						"serverNames":  []any{reality.SNI},
+						"privateKey":   reality.PrivateKey,
+						"shortIds":     []any{reality.ShortID},
+						"minClientVer": "",
+						"maxClientVer": "",
+						"maxTimeDiff":  0,
+					},
+				},
+				"sniffing": map[string]any{
+					"enabled":      sniffingEnabled,
+					"destOverride": []any{"http", "tls", "quic"},
+				},
+			},
+		},
+		"outbounds": outbounds,
+		"routing": map[string]any{
+			"domainStrategy": "AsIs",
+			"rules":          allRules,
+		},
+	}
+
+	if len(dnsServers) > 0 {
+		servers := make([]any, len(dnsServers))
+		for i, s := range dnsServers {
+			servers[i] = s
+		}
+		configMap["dns"] = map[string]any{"servers": servers}
+	}
+
 	return map[string]any{
 		"schema_version":           SchemaVersion,
 		"generated_by":             GeneratedBy,
@@ -200,68 +290,8 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 			"security": "reality",
 			"xtls":     "vision",
 		},
-		"config_kind": ConfigKind,
-		"config": map[string]any{
-			"log": map[string]any{
-				"loglevel": "warning",
-			},
-			"stats": map[string]any{},
-			"policy": map[string]any{
-				"levels": map[string]any{
-					"0": map[string]any{
-						"handshake":         4,
-						"connIdle":          300,
-						"uplinkOnly":        2,
-						"downlinkOnly":      5,
-						"statsUserUplink":   true,
-						"statsUserDownlink": true,
-					},
-				},
-				"system": map[string]any{
-					"statsInboundUplink":    true,
-					"statsInboundDownlink":  true,
-					"statsOutboundUplink":   true,
-					"statsOutboundDownlink": true,
-				},
-			},
-			"inbounds": []any{
-				map[string]any{
-					"tag":      inboundTag,
-					"listen":   "0.0.0.0",
-					"port":     reality.VLESSPort,
-					"protocol": "vless",
-					"settings": map[string]any{
-						"clients":    renderClients(accessEntries),
-						"decryption": "none",
-						"fallbacks":  []any{},
-					},
-					"streamSettings": map[string]any{
-						"network":  "tcp",
-						"security": "reality",
-						"realitySettings": map[string]any{
-							"show":         false,
-							"dest":         reality.Dest,
-							"xver":         0,
-							"serverNames":  []any{reality.SNI},
-							"privateKey":   reality.PrivateKey,
-							"shortIds":     []any{reality.ShortID},
-							"minClientVer": "",
-							"maxClientVer": "",
-							"maxTimeDiff":  0,
-						},
-					},
-					"sniffing": map[string]any{
-						"enabled":      true,
-						"destOverride": []any{"http", "tls", "quic"},
-					},
-				},
-			},
-			"outbounds": outbounds,
-			"routing": map[string]any{
-				"domainStrategy": "AsIs",
-				"rules":          allRules,
-			},
-		},
+		"config_kind":        ConfigKind,
+		"config":             configMap,
 		"subscription_inputs": subscriptionSummary,
 		"access_entries":      accessEntries,
 		"config_text": fmt.Sprintf(
