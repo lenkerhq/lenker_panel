@@ -312,3 +312,71 @@ func TestRenderVLESSRealityPayloadNilGlobalSettingsUsesDefaults(t *testing.T) {
 		t.Fatalf("expected no dns section with nil GlobalSettings")
 	}
 }
+
+func TestRenderVLESSRealityPayloadWithWarp(t *testing.T) {
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+		WarpCredentials: &WarpInput{
+			PrivateKey: "warp-private-key",
+			PublicKey:  "warp-public-key",
+			Address:    "172.16.0.2/32",
+			Endpoint:   "engage.cloudflareclient.com:2408",
+		},
+		RoutingRules: []RoutingRuleInput{
+			{RuleType: "geoip", Target: "ru", Action: "warp"},
+		},
+	})
+
+	if err := ValidateVLESSRealityPayload(payload); err != nil {
+		t.Fatalf("expected valid payload with warp: %v", err)
+	}
+
+	config := payload["config"].(map[string]any)
+	outbounds := config["outbounds"].([]any)
+
+	// Should have direct + warp
+	if len(outbounds) != 2 {
+		t.Fatalf("expected 2 outbounds (direct + warp), got %d", len(outbounds))
+	}
+
+	warpOutbound := outbounds[1].(map[string]any)
+	if warpOutbound["tag"] != "warp" || warpOutbound["protocol"] != "wireguard" {
+		t.Fatalf("expected warp/wireguard outbound, got %v", warpOutbound)
+	}
+
+	settings := warpOutbound["settings"].(map[string]any)
+	if settings["secretKey"] != "warp-private-key" {
+		t.Fatalf("unexpected secretKey: %v", settings["secretKey"])
+	}
+
+	// Routing rule should reference warp outbound
+	routing := config["routing"].(map[string]any)
+	rules := routing["rules"].([]any)
+	if len(rules) != 2 { // custom + default
+		t.Fatalf("expected 2 routing rules, got %d", len(rules))
+	}
+	firstRule := rules[0].(map[string]any)
+	if firstRule["outboundTag"] != "warp" {
+		t.Fatalf("expected first rule outbound=warp, got %v", firstRule["outboundTag"])
+	}
+}
+
+func TestRenderVLESSRealityPayloadWarpWithoutCredentials(t *testing.T) {
+	// Routing rule with action "warp" but no WarpCredentials — outbound "warp" won't exist
+	// but the rule still renders (validator won't catch this at render time, it's a config issue)
+	payload := RenderVLESSRealityPayload(RenderInput{
+		NodeID:         "node-1",
+		RevisionNumber: 7,
+		RoutingRules: []RoutingRuleInput{
+			{RuleType: "geoip", Target: "ru", Action: "warp"},
+		},
+	})
+
+	config := payload["config"].(map[string]any)
+	outbounds := config["outbounds"].([]any)
+	// Only direct outbound, no warp
+	if len(outbounds) != 1 {
+		t.Fatalf("expected 1 outbound without warp credentials, got %d", len(outbounds))
+	}
+}

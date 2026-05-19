@@ -210,7 +210,7 @@ func validateOutbounds(outbounds []any) (map[string]bool, error) {
 		if !ok {
 			return nil, invalidXrayConfig("missing_outbound_protocol")
 		}
-		if protocol != "freedom" && protocol != "blackhole" {
+		if protocol != "freedom" && protocol != "blackhole" && protocol != "wireguard" {
 			return nil, invalidXrayConfig("unsupported_outbound_protocol")
 		}
 		tags[tag] = true

@@ -258,6 +258,9 @@ const (
 
 	ActionSettingUpdate = "setting.update"
 
+	ActionWarpSet    = "warp.set"
+	ActionWarpDelete = "warp.delete"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )

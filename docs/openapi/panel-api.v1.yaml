@@ -1218,6 +1218,74 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/nodes/{id}/warp:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [WARP]
+      summary: Get WARP credentials for a node
+      responses:
+        "200":
+          description: WARP credentials.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarpCredentialsEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [WARP]
+      summary: Set WARP credentials for a node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarpCredentialsInput"
+      responses:
+        "200":
+          description: WARP credentials set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarpCredentialsEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [WARP]
+      summary: Disable WARP for a node
+      responses:
+        "200":
+          description: WARP disabled.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/warp/generate:
+    post:
+      tags: [WARP]
+      summary: Generate a WireGuard keypair for WARP
+      responses:
+        "200":
+          description: Generated keypair.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarpGenerateEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/settings:
     get:
       tags: [Settings]
@@ -3014,6 +3082,58 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/TrafficReportResult"
+    WarpCredentials:
+      type: object
+      required: [node_id, public_key, address, endpoint, enabled, created_at]
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        public_key:
+          type: string
+        address:
+          type: string
+        endpoint:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    WarpCredentialsInput:
+      type: object
+      required: [private_key, public_key, address]
+      properties:
+        private_key:
+          type: string
+        public_key:
+          type: string
+        address:
+          type: string
+        endpoint:
+          type: string
+    WarpGenerateResult:
+      type: object
+      required: [private_key, public_key]
+      properties:
+        private_key:
+          type: string
+        public_key:
+          type: string
+    WarpCredentialsEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/WarpCredentials"
+    WarpGenerateEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/WarpGenerateResult"
     GlobalSetting:
       type: object
       required: [key, value, updated_at]

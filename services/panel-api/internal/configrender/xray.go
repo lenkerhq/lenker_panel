@@ -91,6 +91,7 @@ type RenderInput struct {
 	SubscriptionInputs     []SubscriptionInput
 	RoutingRules           []RoutingRuleInput
 	GlobalSettings         *GlobalSettingsInput
+	WarpCredentials        *WarpInput
 	RollbackTargetRevision int
 }
 
@@ -99,6 +100,14 @@ type GlobalSettingsInput struct {
 	LogLevel      string
 	Sniffing      bool
 	DNSServers    []string
+}
+
+// WarpInput holds WARP credentials for rendering a wireguard outbound.
+type WarpInput struct {
+	PrivateKey string
+	PublicKey  string
+	Address   string
+	Endpoint  string
 }
 
 // RoutingRuleInput represents a routing rule to be rendered into the Xray config.
@@ -184,6 +193,24 @@ func RenderVLESSRealityPayloadWithReality(input RenderInput, reality RealityConf
 		outbounds = append(outbounds, map[string]any{
 			"tag":      "block",
 			"protocol": "blackhole",
+		})
+	}
+
+	// Add WARP (WireGuard) outbound if credentials are provided.
+	if input.WarpCredentials != nil {
+		outbounds = append(outbounds, map[string]any{
+			"tag":      "warp",
+			"protocol": "wireguard",
+			"settings": map[string]any{
+				"secretKey": input.WarpCredentials.PrivateKey,
+				"address":   []any{input.WarpCredentials.Address},
+				"peers": []any{
+					map[string]any{
+						"publicKey": input.WarpCredentials.PublicKey,
+						"endpoint":  input.WarpCredentials.Endpoint,
+					},
+				},
+			},
 		})
 	}
 
@@ -465,9 +492,10 @@ func actionToOutbound(action string) string {
 	switch action {
 	case "block":
 		return "block"
-	case "direct", "warp":
-		// warp falls back to direct until WARP integration is implemented
+	case "direct":
 		return "direct"
+	case "warp":
+		return "warp"
 	case "proxy":
 		return "direct"
 	default:
