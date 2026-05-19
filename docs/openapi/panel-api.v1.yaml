@@ -15,6 +15,7 @@ tags:
   - name: Devices
   - name: Traffic
   - name: Nodes
+  - name: Profiles
 security:
   - bearerAuth: []
 paths:
@@ -1598,6 +1599,130 @@ paths:
       responses:
         "200":
           description: Device deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/node-profiles:
+    get:
+      tags: [Profiles]
+      summary: List node profiles
+      responses:
+        "200":
+          description: Node profiles list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeProfileListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Profiles]
+      summary: Create a node profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNodeProfileRequest"
+      responses:
+        "201":
+          description: Node profile created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/node-profiles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Profiles]
+      summary: Get a node profile
+      responses:
+        "200":
+          description: Node profile details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeProfileEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [Profiles]
+      summary: Update a node profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNodeProfileRequest"
+      responses:
+        "200":
+          description: Node profile updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeProfileEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Profiles]
+      summary: Delete a node profile
+      description: Only user-created profiles can be deleted. System profiles return 400.
+      responses:
+        "200":
+          description: Node profile deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/node-profiles/{id}/apply/{nodeId}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Target node identifier.
+    post:
+      tags: [Profiles]
+      summary: Apply a node profile to a node
+      description: Copies routing rules from the profile config into the node's routing rules.
+      responses:
+        "200":
+          description: Profile applied to node.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeProfileApplyEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -3289,3 +3414,94 @@ components:
           enum: [ios, android, windows, macos, linux]
         app_version:
           type: string
+    NodeProfile:
+      type: object
+      required: [id, name, is_system, config, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_system:
+          type: boolean
+        config:
+          type: object
+          properties:
+            routing_rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  rule_type:
+                    type: string
+                    enum: [geosite, geoip, domain, ip, port, protocol]
+                  target:
+                    type: string
+                  action:
+                    type: string
+                    enum: [block, proxy, direct, warp]
+                  outbound_tag:
+                    type: string
+                    nullable: true
+                  priority:
+                    type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NodeProfileEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/NodeProfile"
+    NodeProfileListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/NodeProfile"
+    NodeProfileApplyEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [profile_id, node_id]
+              properties:
+                profile_id:
+                  type: string
+                  format: uuid
+                node_id:
+                  type: string
+                  format: uuid
+    CreateNodeProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          type: object
+    UpdateNodeProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          type: object

@@ -24,6 +24,7 @@ type RouterDeps struct {
 	Routing       Handler
 	Settings      Handler
 	Warp          Handler
+	Profiles      Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -44,6 +45,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		deps.Routing,
 		deps.Settings,
 		deps.Warp,
+		deps.Profiles,
 	} {
 		if handler != nil {
 			handler.RegisterRoutes(mux)

@@ -261,6 +261,11 @@ const (
 	ActionWarpSet    = "warp.set"
 	ActionWarpDelete = "warp.delete"
 
+	ActionProfileCreate = "node_profile.create"
+	ActionProfileUpdate = "node_profile.update"
+	ActionProfileDelete = "node_profile.delete"
+	ActionProfileApply  = "node_profile.apply"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )

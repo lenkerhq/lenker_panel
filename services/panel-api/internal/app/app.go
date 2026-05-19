@@ -19,6 +19,7 @@ import (
 	httpapi "github.com/lenker/lenker/services/panel-api/internal/http"
 	"github.com/lenker/lenker/services/panel-api/internal/nodes"
 	"github.com/lenker/lenker/services/panel-api/internal/plans"
+	"github.com/lenker/lenker/services/panel-api/internal/profiles"
 	"github.com/lenker/lenker/services/panel-api/internal/storage"
 	"github.com/lenker/lenker/services/panel-api/internal/subscriptions"
 	"github.com/lenker/lenker/services/panel-api/internal/traffic"
@@ -55,6 +56,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 	settingsSvc := settings.NewService(settingsRepo)
 	warpRepo := warp.NewPostgresRepository(store.DB())
 	warpSvc := warp.NewService(warpRepo)
+	profilesRepo := profiles.NewPostgresRepository(store.DB())
+	profilesSvc := profiles.NewService(profilesRepo, routingSvc)
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
@@ -70,6 +73,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Routing:       routing.NewHandler(logger, routingSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Settings:      settings.NewHandler(logger, settingsSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Warp:          warp.NewHandler(logger, warpSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Profiles:      profiles.NewHandler(logger, profilesSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 	})
 
 	server := &http.Server{
