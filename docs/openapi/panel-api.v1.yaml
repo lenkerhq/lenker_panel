@@ -12,6 +12,7 @@ tags:
   - name: Users
   - name: Plans
   - name: Subscriptions
+  - name: Devices
   - name: Nodes
 security:
   - bearerAuth: []
@@ -940,6 +941,151 @@ paths:
                 $ref: "#/components/schemas/NodeHeartbeatEnvelope"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/subscriptions/{id}/devices:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Devices]
+      summary: List devices for a subscription
+      responses:
+        "200":
+          description: Devices list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/devices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Devices]
+      summary: Get device detail
+      responses:
+        "200":
+          description: Device detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Devices]
+      summary: Revoke (delete) a device
+      responses:
+        "200":
+          description: Device deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/devices/{id}/deactivate:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Devices]
+      summary: Soft-deactivate a device
+      responses:
+        "200":
+          description: Device deactivated.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/client/devices/register:
+    post:
+      tags: [Devices]
+      summary: Register a client device
+      description: Auth via Bearer subscription access token. Returns 403 if device_limit exceeded.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientDeviceRegisterRequest"
+      responses:
+        "200":
+          description: Device registered or updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Device limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/client/devices/heartbeat:
+    post:
+      tags: [Devices]
+      summary: Update device last_seen
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_fingerprint]
+              properties:
+                device_fingerprint:
+                  type: string
+      responses:
+        "200":
+          description: Heartbeat accepted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/client/devices/me:
+    delete:
+      tags: [Devices]
+      summary: Delete current device
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_fingerprint]
+              properties:
+                device_fingerprint:
+                  type: string
+      responses:
+        "200":
+          description: Device deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -2185,3 +2331,73 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/NodeHeartbeatResponse"
+    Device:
+      type: object
+      required: [id, subscription_id, device_fingerprint, is_active, first_seen_at, last_seen_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        device_fingerprint:
+          type: string
+        device_name:
+          type: string
+          nullable: true
+        platform:
+          type: string
+          nullable: true
+          enum: [ios, android, windows, macos, linux]
+        app_version:
+          type: string
+          nullable: true
+        first_seen_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        last_ip:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DeviceEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Device"
+    DeviceListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Device"
+    ClientDeviceRegisterRequest:
+      type: object
+      required: [device_fingerprint]
+      properties:
+        device_fingerprint:
+          type: string
+          description: Hashed unique device identifier.
+        device_name:
+          type: string
+          description: User-provided device name.
+        platform:
+          type: string
+          enum: [ios, android, windows, macos, linux]
+        app_version:
+          type: string

@@ -685,3 +685,40 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   });
   return payload.data;
 }
+
+// --- Devices ---
+
+export interface Device {
+  id: string;
+  subscription_id: string;
+  device_fingerprint: string;
+  device_name: string | null;
+  platform: string | null;
+  app_version: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  last_ip: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DeviceListResponse {
+  data?: Device[] | null;
+}
+
+export async function listSubscriptionDevices(session: StoredSession, subscriptionID: string): Promise<Device[]> {
+  const payload = await authorizedRequest<DeviceListResponse>(
+    session,
+    `/api/v1/subscriptions/${encodeURIComponent(subscriptionID)}/devices`,
+  );
+  return readListData(payload, "devices");
+}
+
+export async function deleteDevice(session: StoredSession, deviceID: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/devices/${encodeURIComponent(deviceID)}`, { method: "DELETE" });
+}
+
+export async function deactivateDevice(session: StoredSession, deviceID: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/devices/${encodeURIComponent(deviceID)}/deactivate`, { method: "POST" });
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/lenker/lenker/services/panel-api/internal/audit"
 	"github.com/lenker/lenker/services/panel-api/internal/auth"
 	"github.com/lenker/lenker/services/panel-api/internal/config"
+	"github.com/lenker/lenker/services/panel-api/internal/devices"
 	httpapi "github.com/lenker/lenker/services/panel-api/internal/http"
 	"github.com/lenker/lenker/services/panel-api/internal/nodes"
 	"github.com/lenker/lenker/services/panel-api/internal/plans"
@@ -39,6 +40,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 	auditRecorder := audit.NewPostgresRecorder(store.DB())
 	adminSession := auth.NewSessionMiddleware(logger, store.Admins()).WithAudit(auditRecorder)
 
+	devicesRepo := devices.NewPostgresRepository(store.DB())
+	devicesSvc := devices.NewService(devicesRepo, store.Subscriptions())
+
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
 		Auth:          auth.NewHandler(logger, auth.NewService(store.Admins(), auth.NewPasswordVerifier()).WithAudit(auditRecorder)),
@@ -48,6 +52,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Subscriptions: subscriptions.NewHandler(logger, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Nodes:         nodes.NewHandler(logger, store.Nodes(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Audit:         audit.NewHandler(logger, auditRecorder, adminSession.RequireAdmin),
+		Devices:       devices.NewHandler(logger, devicesRepo, devicesSvc, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 	})
 
 	server := &http.Server{

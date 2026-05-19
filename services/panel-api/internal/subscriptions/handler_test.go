@@ -644,6 +644,13 @@ func (r *fakeSubscriptionsRepository) Renew(ctx context.Context, id string, exte
 	return testSubscription(id), nil
 }
 
+func (r *fakeSubscriptionsRepository) SubscriptionIDByToken(ctx context.Context, token string) (string, error) {
+	if r.consumerErr != nil {
+		return "", r.consumerErr
+	}
+	return "sub-1", nil
+}
+
 func testSubscription(id string) storage.Subscription {
 	now := time.Now().UTC()
 	return storage.Subscription{

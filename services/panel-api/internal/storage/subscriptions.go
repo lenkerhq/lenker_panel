@@ -149,6 +149,7 @@ type SubscriptionsRepository interface {
 	ClaimHandoffInvite(ctx context.Context, token string) (SubscriptionHandoffClaim, error)
 	Update(ctx context.Context, id string, input UpdateSubscriptionInput) (Subscription, error)
 	Renew(ctx context.Context, id string, extendDays int) (Subscription, error)
+	SubscriptionIDByToken(ctx context.Context, token string) (string, error)
 }
 
 var (
@@ -993,4 +994,27 @@ func (r *subscriptionsRepository) Renew(ctx context.Context, id string, extendDa
 		return Subscription{}, err
 	}
 	return subscription, nil
+}
+
+func (r *subscriptionsRepository) SubscriptionIDByToken(ctx context.Context, token string) (string, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", ErrInvalidSubscriptionAccessToken
+	}
+	var subscriptionID string
+	err := r.db.QueryRowContext(ctx, `
+		SELECT subscription_id::text
+		FROM subscription_access_tokens
+		WHERE token_hash = $1
+		  AND status = 'active'
+		  AND expires_at > now()
+		LIMIT 1
+	`, HashSubscriptionAccessToken(token)).Scan(&subscriptionID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrInvalidSubscriptionAccessToken
+		}
+		return "", err
+	}
+	return subscriptionID, nil
 }

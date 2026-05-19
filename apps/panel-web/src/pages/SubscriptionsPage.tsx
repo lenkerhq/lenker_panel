@@ -3,10 +3,13 @@ import {
   createSubscriptionHandoffInvite,
   createSubscriptionAccessToken,
   createSubscription,
+  deactivateDevice,
+  deleteDevice,
   getSubscriptionAccess,
   getSubscriptionHandoffInviteStatus,
   getSubscriptionAccessTokenStatus,
   listPlans,
+  listSubscriptionDevices,
   listSubscriptions,
   listUsers,
   PanelApiError,
@@ -15,6 +18,7 @@ import {
   revokeSubscriptionAccessToken,
   rotateSubscriptionAccessToken,
   updateSubscription,
+  type Device,
   type Plan,
   type Subscription,
   type SubscriptionAccess,
@@ -794,6 +798,10 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
           )}
         </section>
       ) : null}
+
+      {subscriptionAccess ? (
+        <DevicesSection session={session} subscriptionID={subscriptionAccess.subscription_id} deviceLimit={editingSubscription?.device_limit ?? subscriptions.find(s => s.id === subscriptionAccess.subscription_id)?.device_limit ?? 0} onUnauthorized={onUnauthorized} />
+      ) : null}
     </div>
   );
 }
@@ -901,4 +909,133 @@ function formatPanelError(error: unknown, fallbackMessage: string): string {
     return `${error.message} (${error.code})`;
   }
   return error instanceof Error ? error.message : fallbackMessage;
+}
+
+// --- Devices section ---
+
+interface DevicesSectionProps {
+  session: StoredSession;
+  subscriptionID: string;
+  deviceLimit: number;
+  onUnauthorized: () => void;
+}
+
+function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }: DevicesSectionProps) {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
+  const [actionID, setActionID] = useState<string | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    setLoadState("loading");
+    try {
+      const result = await listSubscriptionDevices(session, subscriptionID);
+      setDevices(result);
+      setLoadState("loaded");
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setLoadState("failed");
+    }
+  }, [session, subscriptionID, onUnauthorized]);
+
+  useEffect(() => {
+    loadDevices();
+  }, [loadDevices]);
+
+  const handleRevoke = async (deviceID: string) => {
+    setActionID(deviceID);
+    try {
+      await deleteDevice(session, deviceID);
+      setDevices((prev) => prev.filter((d) => d.id !== deviceID));
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+      }
+    } finally {
+      setActionID(null);
+    }
+  };
+
+  const handleDeactivate = async (deviceID: string) => {
+    setActionID(deviceID);
+    try {
+      await deactivateDevice(session, deviceID);
+      setDevices((prev) => prev.map((d) => (d.id === deviceID ? { ...d, is_active: false } : d)));
+    } catch (err) {
+      if (err instanceof PanelApiError && err.status === 401) {
+        onUnauthorized();
+      }
+    } finally {
+      setActionID(null);
+    }
+  };
+
+  const activeCount = devices.filter((d) => d.is_active).length;
+
+  return (
+    <section className="management-panel">
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Devices</p>
+          <h4>
+            {activeCount}/{deviceLimit} devices used
+          </h4>
+        </div>
+      </div>
+      {loadState === "loading" ? <p className="state-text">Loading devices...</p> : null}
+      {loadState === "failed" ? <p className="state-text">Failed to load devices.</p> : null}
+      {loadState === "loaded" && devices.length === 0 ? <p className="state-text">No devices registered yet.</p> : null}
+      {loadState === "loaded" && devices.length > 0 ? (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Platform</th>
+                <th>Last seen</th>
+                <th>IP</th>
+                <th>Active</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devices.map((device) => (
+                <tr key={device.id}>
+                  <td>{device.device_name || device.device_fingerprint.slice(0, 12)}</td>
+                  <td>{device.platform || "-"}</td>
+                  <td>{formatDate(device.last_seen_at)}</td>
+                  <td>{device.last_ip || "-"}</td>
+                  <td>{device.is_active ? "yes" : "no"}</td>
+                  <td>
+                    <div className="row-actions">
+                      {device.is_active ? (
+                        <button
+                          className="table-button"
+                          type="button"
+                          onClick={() => handleDeactivate(device.id)}
+                          disabled={actionID === device.id}
+                        >
+                          Deactivate
+                        </button>
+                      ) : null}
+                      <button
+                        className="table-button danger"
+                        type="button"
+                        onClick={() => handleRevoke(device.id)}
+                        disabled={actionID === device.id}
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
 }

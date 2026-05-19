@@ -245,6 +245,9 @@ const (
 	ActionNodeConfigRevisionReport   = "node.config_revision.report"
 	ActionNodeConfigRevisionRollback = "node.config_revision.rollback"
 
+	ActionDeviceDelete     = "device.delete"
+	ActionDeviceDeactivate = "device.deactivate"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )
