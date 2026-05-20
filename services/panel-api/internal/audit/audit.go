@@ -266,6 +266,10 @@ const (
 	ActionProfileDelete = "node_profile.delete"
 	ActionProfileApply  = "node_profile.apply"
 
+	ActionTemplateCreate = "subscription_template.create"
+	ActionTemplateUpdate = "subscription_template.update"
+	ActionTemplateDelete = "subscription_template.delete"
+
 	OutcomeSuccess = "success"
 	OutcomeFailure = "failure"
 )

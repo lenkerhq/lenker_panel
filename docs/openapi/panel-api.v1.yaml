@@ -12,6 +12,7 @@ tags:
   - name: Users
   - name: Plans
   - name: Subscriptions
+  - name: SubscriptionTemplates
   - name: Devices
   - name: Traffic
   - name: Nodes
@@ -1729,6 +1730,130 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/subscription-templates:
+    get:
+      tags: [SubscriptionTemplates]
+      summary: List subscription templates
+      responses:
+        "200":
+          description: Subscription templates list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTemplateListEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [SubscriptionTemplates]
+      summary: Create a subscription template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionTemplateRequest"
+      responses:
+        "201":
+          description: Subscription template created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTemplateEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/subscription-templates/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [SubscriptionTemplates]
+      summary: Get a subscription template
+      responses:
+        "200":
+          description: Subscription template details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTemplateEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      tags: [SubscriptionTemplates]
+      summary: Update a subscription template
+      description: Only user-created templates can be updated. System templates return 400.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionTemplateRequest"
+      responses:
+        "200":
+          description: Subscription template updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTemplateEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [SubscriptionTemplates]
+      summary: Delete a subscription template
+      description: Only user-created templates can be deleted. System templates return 400.
+      responses:
+        "200":
+          description: Subscription template deleted.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/subscription-templates/{id}/create-subscription:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [SubscriptionTemplates]
+      summary: Create a subscription from a template
+      description: Creates a new subscription using the template's plan_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionFromTemplateRequest"
+      responses:
+        "201":
+          description: Subscription created from template.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -2423,12 +2548,17 @@ components:
               $ref: "#/components/schemas/ClientHandoffClaim"
     CreateSubscriptionRequest:
       type: object
-      required: [user_id, plan_id]
+      required: [user_id]
       properties:
         user_id:
           type: string
         plan_id:
           type: string
+          description: Required unless template_id is provided.
+        template_id:
+          type: string
+          format: uuid
+          description: Optional. If provided and plan_id is empty, resolves plan_id from the template.
         preferred_region:
           type: string
           nullable: true
@@ -3505,3 +3635,108 @@ components:
           type: string
         config:
           type: object
+    SubscriptionTemplate:
+      type: object
+      required: [id, name, config, is_system, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        plan_id:
+          type: string
+          format: uuid
+          nullable: true
+        config:
+          type: object
+          properties:
+            duration_days:
+              type: integer
+            traffic_limit_bytes:
+              type: integer
+              format: int64
+              nullable: true
+            device_limit:
+              type: integer
+        is_system:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    SubscriptionTemplateEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/SubscriptionTemplate"
+    SubscriptionTemplateListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/SubscriptionTemplate"
+    CreateSubscriptionTemplateRequest:
+      type: object
+      required: [name, config]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        plan_id:
+          type: string
+          format: uuid
+        config:
+          type: object
+          required: [duration_days, device_limit]
+          properties:
+            duration_days:
+              type: integer
+              minimum: 1
+            traffic_limit_bytes:
+              type: integer
+              format: int64
+              nullable: true
+            device_limit:
+              type: integer
+              minimum: 1
+    UpdateSubscriptionTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        plan_id:
+          type: string
+          format: uuid
+        config:
+          type: object
+          properties:
+            duration_days:
+              type: integer
+              minimum: 1
+            traffic_limit_bytes:
+              type: integer
+              format: int64
+              nullable: true
+            device_limit:
+              type: integer
+              minimum: 1
+    CreateSubscriptionFromTemplateRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+        preferred_region:
+          type: string
+          nullable: true

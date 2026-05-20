@@ -20,12 +20,13 @@ import (
 	"github.com/lenker/lenker/services/panel-api/internal/nodes"
 	"github.com/lenker/lenker/services/panel-api/internal/plans"
 	"github.com/lenker/lenker/services/panel-api/internal/profiles"
+	"github.com/lenker/lenker/services/panel-api/internal/routing"
+	"github.com/lenker/lenker/services/panel-api/internal/settings"
 	"github.com/lenker/lenker/services/panel-api/internal/storage"
+	subscription_templates "github.com/lenker/lenker/services/panel-api/internal/subscription_templates"
 	"github.com/lenker/lenker/services/panel-api/internal/subscriptions"
 	"github.com/lenker/lenker/services/panel-api/internal/traffic"
 	"github.com/lenker/lenker/services/panel-api/internal/users"
-	"github.com/lenker/lenker/services/panel-api/internal/routing"
-	"github.com/lenker/lenker/services/panel-api/internal/settings"
 	"github.com/lenker/lenker/services/panel-api/internal/warp"
 )
 
@@ -58,6 +59,8 @@ func Run(ctx context.Context, cfg config.Config) error {
 	warpSvc := warp.NewService(warpRepo)
 	profilesRepo := profiles.NewPostgresRepository(store.DB())
 	profilesSvc := profiles.NewService(profilesRepo, routingSvc)
+	templatesRepo := subscription_templates.NewPostgresRepository(store.DB())
+	templatesSvc := subscription_templates.NewService(templatesRepo, store.Subscriptions())
 
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
@@ -65,7 +68,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Admins:        admins.NewHandler(logger),
 		Users:         users.NewHandler(logger, store.Users(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Plans:         plans.NewHandler(logger, store.Plans(), adminSession.RequireAdmin).WithAudit(auditRecorder),
-		Subscriptions: subscriptions.NewHandler(logger, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Subscriptions: subscriptions.NewHandler(logger, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder).WithTemplates(templatesSvc),
 		Nodes:         nodes.NewHandler(logger, store.Nodes(), adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Audit:         audit.NewHandler(logger, auditRecorder, adminSession.RequireAdmin),
 		Devices:       devices.NewHandler(logger, devicesRepo, devicesSvc, store.Subscriptions(), adminSession.RequireAdmin).WithAudit(auditRecorder),
@@ -74,6 +77,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Settings:      settings.NewHandler(logger, settingsSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Warp:          warp.NewHandler(logger, warpSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Profiles:      profiles.NewHandler(logger, profilesSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Templates:     subscription_templates.NewHandler(logger, templatesSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 	})
 
 	server := &http.Server{

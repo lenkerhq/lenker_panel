@@ -1,6 +1,7 @@
 package subscriptions
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -18,6 +19,12 @@ type Handler struct {
 	subscriptions storage.SubscriptionsRepository
 	adminOnly     func(http.Handler) http.Handler
 	audit         audit.Recorder
+	templates     TemplateResolver
+}
+
+// TemplateResolver resolves a template_id to a plan_id.
+type TemplateResolver interface {
+	ResolvePlanID(ctx context.Context, templateID string) (string, error)
 }
 
 func NewHandler(logger *slog.Logger, subscriptions storage.SubscriptionsRepository, adminOnly func(http.Handler) http.Handler) *Handler {
@@ -27,6 +34,13 @@ func NewHandler(logger *slog.Logger, subscriptions storage.SubscriptionsReposito
 func (h *Handler) WithAudit(recorder audit.Recorder) *Handler {
 	if recorder != nil {
 		h.audit = recorder
+	}
+	return h
+}
+
+func (h *Handler) WithTemplates(resolver TemplateResolver) *Handler {
+	if resolver != nil {
+		h.templates = resolver
 	}
 	return h
 }
@@ -62,6 +76,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		UserID          string  `json:"user_id"`
 		PlanID          string  `json:"plan_id"`
+		TemplateID      string  `json:"template_id"`
 		PreferredRegion *string `json:"preferred_region"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -72,10 +87,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httpapi.WriteBadRequest(w, "user_id is required")
 		return
 	}
-	if strings.TrimSpace(request.PlanID) == "" {
+
+	planID := strings.TrimSpace(request.PlanID)
+	if planID == "" && strings.TrimSpace(request.TemplateID) != "" && h.templates != nil {
+		resolved, err := h.templates.ResolvePlanID(r.Context(), strings.TrimSpace(request.TemplateID))
+		if err != nil {
+			httpapi.WriteBadRequest(w, "template not found or has no plan_id")
+			return
+		}
+		planID = resolved
+	}
+	if planID == "" {
 		httpapi.WriteBadRequest(w, "plan_id is required")
 		return
 	}
+
 	var preferredRegion *string
 	if request.PreferredRegion != nil {
 		value := strings.TrimSpace(*request.PreferredRegion)
@@ -86,7 +112,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	subscription, err := h.subscriptions.Create(r.Context(), storage.CreateSubscriptionInput{
 		UserID:          strings.TrimSpace(request.UserID),
-		PlanID:          strings.TrimSpace(request.PlanID),
+		PlanID:          planID,
 		PreferredRegion: preferredRegion,
 	})
 	if err != nil {
