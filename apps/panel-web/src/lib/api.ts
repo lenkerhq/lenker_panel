@@ -686,6 +686,100 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   return payload.data;
 }
 
+// --- Routing Rules ---
+
+export type RoutingRuleType = "geosite" | "geoip" | "domain" | "ip" | "port" | "protocol";
+export type RoutingRuleAction = "block" | "proxy" | "direct" | "warp";
+
+export interface RoutingRule {
+  id: string;
+  node_id: string | null;
+  rule_type: RoutingRuleType;
+  target: string;
+  action: RoutingRuleAction;
+  outbound_tag: string | null;
+  priority: number;
+  enabled: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRoutingRuleInput {
+  rule_type: RoutingRuleType;
+  target: string;
+  action: RoutingRuleAction;
+  outbound_tag?: string;
+  priority?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
+export interface UpdateRoutingRuleInput {
+  rule_type?: RoutingRuleType;
+  target?: string;
+  action?: RoutingRuleAction;
+  outbound_tag?: string;
+  priority?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
+export interface ReorderEntry {
+  id: string;
+  priority: number;
+}
+
+interface RoutingRuleListResponse {
+  data?: RoutingRule[] | null;
+}
+
+interface RoutingRuleResponse {
+  data: RoutingRule;
+}
+
+export async function listGlobalRoutingRules(session: StoredSession): Promise<RoutingRule[]> {
+  const payload = await authorizedRequest<RoutingRuleListResponse>(session, "/api/v1/routing-rules/global");
+  return readListData(payload, "routing rules");
+}
+
+export async function createGlobalRoutingRule(session: StoredSession, input: CreateRoutingRuleInput): Promise<RoutingRule> {
+  const payload = await authorizedRequest<RoutingRuleResponse>(session, "/api/v1/routing-rules/global", { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function updateGlobalRoutingRule(session: StoredSession, ruleID: string, input: UpdateRoutingRuleInput): Promise<RoutingRule> {
+  const payload = await authorizedRequest<RoutingRuleResponse>(session, `/api/v1/routing-rules/global/${encodeURIComponent(ruleID)}`, { method: "PUT", body: input });
+  return payload.data;
+}
+
+export async function deleteGlobalRoutingRule(session: StoredSession, ruleID: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/routing-rules/global/${encodeURIComponent(ruleID)}`, { method: "DELETE" });
+}
+
+export async function listNodeRoutingRules(session: StoredSession, nodeID: string): Promise<RoutingRule[]> {
+  const payload = await authorizedRequest<RoutingRuleListResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/routing-rules`);
+  return readListData(payload, "routing rules");
+}
+
+export async function createNodeRoutingRule(session: StoredSession, nodeID: string, input: CreateRoutingRuleInput): Promise<RoutingRule> {
+  const payload = await authorizedRequest<RoutingRuleResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/routing-rules`, { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function updateNodeRoutingRule(session: StoredSession, nodeID: string, ruleID: string, input: UpdateRoutingRuleInput): Promise<RoutingRule> {
+  const payload = await authorizedRequest<RoutingRuleResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/routing-rules/${encodeURIComponent(ruleID)}`, { method: "PUT", body: input });
+  return payload.data;
+}
+
+export async function deleteNodeRoutingRule(session: StoredSession, nodeID: string, ruleID: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/routing-rules/${encodeURIComponent(ruleID)}`, { method: "DELETE" });
+}
+
+export async function reorderNodeRoutingRules(session: StoredSession, nodeID: string, entries: ReorderEntry[]): Promise<void> {
+  await authorizedRequest(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/routing-rules/reorder`, { method: "POST", body: entries });
+}
+
 // --- WARP ---
 
 export interface WarpCredentials {

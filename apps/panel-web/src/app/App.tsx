@@ -4,6 +4,7 @@ import { clearStoredSession, loadStoredSession, saveStoredSession, type StoredSe
 import { NodeProfilesPage } from "../pages/NodeProfilesPage";
 import { NodesPage } from "../pages/NodesPage";
 import { PlansPage } from "../pages/PlansPage";
+import { RoutingRulesPage } from "../pages/RoutingRulesPage";
 import { SubscriptionsPage } from "../pages/SubscriptionsPage";
 import { SubscriptionTemplatesPage } from "../pages/SubscriptionTemplatesPage";
 import { UsersPage } from "../pages/UsersPage";
@@ -14,7 +15,7 @@ interface LoginFormState {
   password: string;
 }
 
-type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles" | "warp";
+type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles" | "warp" | "routing";
 
 interface NavigationItem {
   page: PanelPage;
@@ -35,6 +36,7 @@ const navigationItems: NavigationItem[] = [
   { page: "nodes", label: "Nodes" },
   { page: "profiles", label: "Profiles" },
   { page: "warp", label: "WARP" },
+  { page: "routing", label: "Routing" },
 ];
 
 export function App() {
@@ -187,6 +189,7 @@ export function App() {
         {activePage === "nodes" ? <NodesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "profiles" ? <NodeProfilesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "warp" ? <WarpConfigurationPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
+        {activePage === "routing" ? <RoutingRulesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
       </section>
     </main>
   );
