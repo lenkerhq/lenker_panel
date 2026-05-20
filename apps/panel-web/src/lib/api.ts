@@ -686,6 +686,34 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   return payload.data;
 }
 
+// --- Settings ---
+
+export interface GlobalSetting {
+  key: string;
+  value: unknown;
+  description: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+interface SettingListResponse {
+  data?: GlobalSetting[] | null;
+}
+
+interface SettingResponse {
+  data: GlobalSetting;
+}
+
+export async function listSettings(session: StoredSession): Promise<GlobalSetting[]> {
+  const payload = await authorizedRequest<SettingListResponse>(session, "/api/v1/settings");
+  return readListData(payload, "settings");
+}
+
+export async function updateSetting(session: StoredSession, key: string, value: unknown): Promise<GlobalSetting> {
+  const payload = await authorizedRequest<SettingResponse>(session, `/api/v1/settings/${encodeURIComponent(key)}`, { method: "PUT", body: { value } });
+  return payload.data;
+}
+
 // --- Routing Rules ---
 
 export type RoutingRuleType = "geosite" | "geoip" | "domain" | "ip" | "port" | "protocol";
