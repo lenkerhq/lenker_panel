@@ -3,6 +3,7 @@ import {
   createSubscriptionHandoffInvite,
   createSubscriptionAccessToken,
   createSubscription,
+  createSubscriptionFromTemplate,
   deactivateDevice,
   deleteDevice,
   getDeviceTraffic,
@@ -14,6 +15,7 @@ import {
   listPlans,
   listSubscriptionDevices,
   listSubscriptions,
+  listSubscriptionTemplates,
   listUsers,
   PanelApiError,
   renewSubscription,
@@ -31,6 +33,7 @@ import {
   type SubscriptionHandoffInviteStatus,
   type SubscriptionAccessToken,
   type SubscriptionAccessTokenStatus,
+  type SubscriptionTemplate,
   type TrafficQuota,
   type TrafficUsage,
   type User,
@@ -61,6 +64,8 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [templates, setTemplates] = useState<SubscriptionTemplate[]>([]);
+  const [selectedTemplateID, setSelectedTemplateID] = useState<string>("");
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
@@ -89,14 +94,16 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
     setErrorMessage(null);
 
     try {
-      const [loadedSubscriptions, loadedUsers, loadedPlans] = await Promise.all([
+      const [loadedSubscriptions, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
         listSubscriptions(session),
         listUsers(session),
         listPlans(session),
+        listSubscriptionTemplates(session),
       ]);
       setSubscriptions(loadedSubscriptions);
       setUsers(loadedUsers);
       setPlans(loadedPlans);
+      setTemplates(loadedTemplates);
       setLoadState("loaded");
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) {
@@ -115,10 +122,11 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
       setErrorMessage(null);
 
       try {
-        const [loadedSubscriptions, loadedUsers, loadedPlans] = await Promise.all([
+        const [loadedSubscriptions, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
           listSubscriptions(session),
           listUsers(session),
           listPlans(session),
+          listSubscriptionTemplates(session),
         ]);
 
         if (!isMounted) {
@@ -128,6 +136,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
         setSubscriptions(loadedSubscriptions);
         setUsers(loadedUsers);
         setPlans(loadedPlans);
+        setTemplates(loadedTemplates);
         setLoadState("loaded");
       } catch (error) {
         if (!isMounted) {
@@ -154,10 +163,21 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
     setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
   }
 
+  function selectTemplate(templateID: string) {
+    setSelectedTemplateID(templateID);
+    if (templateID) {
+      const template = templates.find((t) => t.id === templateID);
+      if (template?.plan_id) {
+        setFormState((cur) => ({ ...cur, planID: template.plan_id as string }));
+      }
+    }
+  }
+
   function resetForm(message?: string) {
     setFormMode("create");
     setEditingSubscription(null);
     setFormState(emptySubscriptionForm());
+    setSelectedTemplateID("");
     setSuccessMessage(message ?? null);
   }
 
@@ -321,7 +341,11 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
     event.preventDefault();
 
     const validationError =
-      formMode === "edit" ? validateUpdateSubscriptionForm(formState) : validateCreateSubscriptionForm(formState);
+      formMode === "edit"
+        ? validateUpdateSubscriptionForm(formState)
+        : selectedTemplateID
+          ? (!formState.userID.trim() ? "User is required." : null)
+          : validateCreateSubscriptionForm(formState);
     if (validationError) {
       setErrorMessage(validationError);
       setSuccessMessage(null);
@@ -336,6 +360,12 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
       if (formMode === "edit" && editingSubscription) {
         await updateSubscription(session, editingSubscription.id, buildUpdateSubscriptionInput(formState));
         resetForm("Subscription updated.");
+      } else if (selectedTemplateID) {
+        await createSubscriptionFromTemplate(session, selectedTemplateID, {
+          user_id: formState.userID.trim(),
+          preferred_region: formState.hasPreferredRegion ? formState.preferredRegion.trim() : undefined,
+        });
+        resetForm("Subscription created from template.");
       } else {
         await createSubscription(session, buildCreateSubscriptionInput(formState));
         resetForm("Subscription created.");
@@ -407,6 +437,23 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
 
           {formMode === "create" ? (
             <>
+              <label className="field-label" htmlFor="subscription-template">
+                Template (optional)
+              </label>
+              <select
+                id="subscription-template"
+                className="select-field"
+                value={selectedTemplateID}
+                onChange={(event) => selectTemplate(event.target.value)}
+              >
+                <option value="">No template</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+
               <label className="field-label" htmlFor="subscription-user">
                 User
               </label>

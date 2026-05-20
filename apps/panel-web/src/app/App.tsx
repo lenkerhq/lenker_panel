@@ -4,6 +4,7 @@ import { clearStoredSession, loadStoredSession, saveStoredSession, type StoredSe
 import { NodesPage } from "../pages/NodesPage";
 import { PlansPage } from "../pages/PlansPage";
 import { SubscriptionsPage } from "../pages/SubscriptionsPage";
+import { SubscriptionTemplatesPage } from "../pages/SubscriptionTemplatesPage";
 import { UsersPage } from "../pages/UsersPage";
 
 interface LoginFormState {
@@ -11,7 +12,7 @@ interface LoginFormState {
   password: string;
 }
 
-type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "nodes";
+type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes";
 
 interface NavigationItem {
   page: PanelPage;
@@ -28,6 +29,7 @@ const navigationItems: NavigationItem[] = [
   { page: "users", label: "Users" },
   { page: "plans", label: "Plans" },
   { page: "subscriptions", label: "Subscriptions" },
+  { page: "templates", label: "Templates" },
   { page: "nodes", label: "Nodes" },
 ];
 
@@ -177,6 +179,7 @@ export function App() {
         {activePage === "users" ? <UsersPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "plans" ? <PlansPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "subscriptions" ? <SubscriptionsPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
+        {activePage === "templates" ? <SubscriptionTemplatesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "nodes" ? <NodesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
       </section>
     </main>

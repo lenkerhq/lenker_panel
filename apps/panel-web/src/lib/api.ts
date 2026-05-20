@@ -626,7 +626,7 @@ export async function rollbackNodeConfigRevision(
 }
 
 interface AuthorizedRequestOptions {
-  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
 }
 
@@ -683,6 +683,70 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   const payload = await authorizedRequest<NodeResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/${action}`, {
     method: "POST",
   });
+  return payload.data;
+}
+
+// --- Subscription Templates ---
+
+export interface SubscriptionTemplateConfig {
+  duration_days: number;
+  traffic_limit_bytes: number | null;
+  device_limit: number;
+}
+
+export interface SubscriptionTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  plan_id: string | null;
+  config: SubscriptionTemplateConfig;
+  is_system: boolean;
+  created_at: string;
+}
+
+export interface CreateSubscriptionTemplateInput {
+  name: string;
+  description?: string;
+  plan_id?: string;
+  config: { duration_days: number; traffic_limit_bytes?: number | null; device_limit: number };
+}
+
+export interface UpdateSubscriptionTemplateInput {
+  name?: string;
+  description?: string;
+  plan_id?: string;
+  config?: { duration_days?: number; traffic_limit_bytes?: number | null; device_limit?: number };
+}
+
+interface SubscriptionTemplateListResponse {
+  data?: SubscriptionTemplate[] | null;
+}
+
+interface SubscriptionTemplateResponse {
+  data: SubscriptionTemplate;
+}
+
+export async function listSubscriptionTemplates(session: StoredSession): Promise<SubscriptionTemplate[]> {
+  const payload = await authorizedRequest<SubscriptionTemplateListResponse>(session, "/api/v1/subscription-templates");
+  return readListData(payload, "subscription templates");
+}
+
+export async function createSubscriptionTemplate(session: StoredSession, input: CreateSubscriptionTemplateInput): Promise<SubscriptionTemplate> {
+  const payload = await authorizedRequest<SubscriptionTemplateResponse>(session, "/api/v1/subscription-templates", { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function updateSubscriptionTemplate(session: StoredSession, id: string, input: UpdateSubscriptionTemplateInput): Promise<SubscriptionTemplate> {
+  const payload = await authorizedRequest<SubscriptionTemplateResponse>(session, `/api/v1/subscription-templates/${encodeURIComponent(id)}`, { method: "PUT", body: input });
+  return payload.data;
+}
+
+export async function deleteSubscriptionTemplate(session: StoredSession, id: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/subscription-templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function createSubscriptionFromTemplate(session: StoredSession, templateID: string, input: { user_id: string; preferred_region?: string | null }): Promise<Subscription> {
+  const payload = await authorizedRequest<SubscriptionResponse>(session, `/api/v1/subscription-templates/${encodeURIComponent(templateID)}/create-subscription`, { method: "POST", body: input });
   return payload.data;
 }
 
