@@ -872,3 +872,80 @@ select {
   .modal-header { padding: 16px 20px; }
   .modal-body { padding: 18px 20px 20px; }
 }
+
+/* Devices/Traffic table container */
+.table-container {
+  overflow-x: auto;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+  background: #ffffff;
+  margin-top: 14px;
+}
+
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 600px;
+}
+
+.table-container th,
+.table-container td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e5ebf4;
+  text-align: left;
+}
+
+.table-container th {
+  background: #f8fafc;
+  color: #53637c;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table-container tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Inline form (quota form) */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #dbe3ef;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.inline-form input {
+  width: 160px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+  font: inherit;
+}
+
+.inline-form input:focus {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow: 0 0 0 4px rgb(37 99 235 / 12%);
+}
+
+/* Settings page rows */
+.setting-row {
+  padding: 18px 0;
+  border-bottom: 1px solid #e5ebf4;
+}
+
+.setting-row:last-child {
+  border-bottom: 0;
+}
+
+.pill-active {
+  background: #172033;
+  color: #ffffff;
+}

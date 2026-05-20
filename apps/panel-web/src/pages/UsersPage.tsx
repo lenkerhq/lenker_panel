@@ -140,8 +140,12 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
         await activateUser(session, user.id);
         setSuccessMessage("User activated.");
       }
-      if (editingUser?.id === user.id) closeEdit();
-      await loadUsers();
+      const loaded = await listUsers(session);
+      setUsers(loaded);
+      const updated = loaded.find((u) => u.id === user.id);
+      if (updated && editingUser?.id === user.id) {
+        setEditingUser(updated);
+      }
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to update user status."));
@@ -220,7 +224,6 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
                   <td className="mono-cell">{user.id}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => openEdit(user)} disabled={isMutating}>Edit</button>
                       {user.status === "active" ? (
                         <button className="table-button danger" type="button" onClick={() => updateUserStatus(user, "suspend")} disabled={mutatingUserID === user.id}>
                           {mutatingUserID === user.id ? "Suspending..." : "Suspend"}

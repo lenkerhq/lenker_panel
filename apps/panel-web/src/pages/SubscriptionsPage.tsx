@@ -76,6 +76,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
   const [isMutating, setIsMutating] = useState(false);
   const [mutatingSubscriptionID, setMutatingSubscriptionID] = useState<string | null>(null);
   const [accessSubscriptionID, setAccessSubscriptionID] = useState<string | null>(null);
+  const [detailSubscriptionID, setDetailSubscriptionID] = useState<string | null>(null);
   const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccess | null>(null);
   const [accessTokenResult, setAccessTokenResult] = useState<SubscriptionAccessToken | null>(null);
   const [accessTokenStatus, setAccessTokenStatus] = useState<SubscriptionAccessTokenStatus | null>(null);
@@ -184,6 +185,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
 
   async function loadSubscriptionAccess(subscription: Subscription) {
     setAccessSubscriptionID(subscription.id);
+    setDetailSubscriptionID(subscription.id);
     setErrorMessage(null);
     setSuccessMessage(null);
 
@@ -467,22 +469,26 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
                 ))}
               </select>
 
-              <label className="field-label" htmlFor="subscription-plan">
-                Plan
-              </label>
-              <select
-                id="subscription-plan"
-                className="select-field"
-                value={formState.planID}
-                onChange={(event) => updateFormField("planID", event.target.value)}
-              >
-                <option value="">Select plan</option>
-                {activePlans.map((plan) => (
-                  <option key={plan.id} value={plan.id}>
-                    {plan.name}
-                  </option>
-                ))}
-              </select>
+              {!selectedTemplateID ? (
+                <>
+                  <label className="field-label" htmlFor="subscription-plan">
+                    Plan
+                  </label>
+                  <select
+                    id="subscription-plan"
+                    className="select-field"
+                    value={formState.planID}
+                    onChange={(event) => updateFormField("planID", event.target.value)}
+                  >
+                    <option value="">Select plan</option>
+                    {activePlans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
             </>
           ) : null}
 
@@ -512,21 +518,8 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
             </>
           ) : null}
 
-          <label className="field-label" htmlFor="subscription-renew-days">
-            Renew days
-          </label>
-          <input
-            id="subscription-renew-days"
-            className="text-field"
-            type="number"
-            min="1"
-            inputMode="numeric"
-            value={formState.renewDays}
-            onChange={(event) => updateFormField("renewDays", event.target.value)}
-          />
-
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : "Create subscription"}
+            {isMutating ? "Saving..." : selectedTemplateID ? "Create from template" : "Create subscription"}
           </button>
         </form>
 
@@ -793,12 +786,12 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
         </section>
       ) : null}
 
-      {subscriptionAccess ? (
-        <DevicesSection session={session} subscriptionID={subscriptionAccess.subscription_id} deviceLimit={editingSubscription?.device_limit ?? subscriptions.find(s => s.id === subscriptionAccess.subscription_id)?.device_limit ?? 0} onUnauthorized={onUnauthorized} />
+      {detailSubscriptionID ? (
+        <DevicesSection session={session} subscriptionID={detailSubscriptionID} deviceLimit={subscriptions.find(s => s.id === detailSubscriptionID)?.device_limit ?? 0} onUnauthorized={onUnauthorized} />
       ) : null}
 
-      {subscriptionAccess ? (
-        <TrafficSection session={session} subscriptionID={subscriptionAccess.subscription_id} onUnauthorized={onUnauthorized} />
+      {detailSubscriptionID ? (
+        <TrafficSection session={session} subscriptionID={detailSubscriptionID} onUnauthorized={onUnauthorized} />
       ) : null}
 
       <Modal isOpen={formMode === "edit" && editingSubscription !== null} onClose={() => resetForm()} title={editingSubscription ? `Edit subscription ${editingSubscription.id.slice(0, 8)}…` : ""} size="medium">

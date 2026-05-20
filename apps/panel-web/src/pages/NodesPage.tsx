@@ -71,8 +71,7 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
   const [rollbackRevisionID, setRollbackRevisionID] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<NodeProfile[]>([]);
-  const [applyingNodeID, setApplyingNodeID] = useState<string | null>(null);
-  const [selectedProfileID, setSelectedProfileID] = useState<string>("");
+  const [profileByNode, setProfileByNode] = useState<Record<string, string>>({});
 
   const activeNodes = useMemo(() => nodes.filter((node) => node.status === "active").length, [nodes]);
   const drainingNodes = useMemo(() => nodes.filter((node) => node.drain_state === "draining").length, [nodes]);
@@ -208,12 +207,6 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
         setNodes(loadedNodes);
         setProfiles(loadedProfiles);
         setLoadState("loaded");
-
-        const firstNodeID = loadedNodes[0]?.id ?? null;
-        setSelectedNodeID(firstNodeID);
-        if (firstNodeID) {
-          await loadNodeDetail(firstNodeID);
-        }
       } catch (error) {
         if (!isMounted) {
           return;
@@ -232,7 +225,7 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
     return () => {
       isMounted = false;
     };
-  }, [loadNodeDetail, onUnauthorized, session]);
+  }, [onUnauthorized, session]);
 
   function updateFormField(fieldName: keyof NodeBootstrapFormState, value: string) {
     setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
@@ -371,19 +364,17 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
   }
 
   async function applyProfileToNode(nodeID: string) {
-    if (!selectedProfileID) return;
-    setApplyingNodeID(nodeID);
+    const profileID = profileByNode[nodeID];
+    if (!profileID) return;
     setErrorMessage(null);
     setSuccessMessage(null);
     try {
-      await applyNodeProfile(session, selectedProfileID, nodeID);
+      await applyNodeProfile(session, profileID, nodeID);
       setSuccessMessage("Profile applied to node.");
-      setApplyingNodeID(null);
-      setSelectedProfileID("");
+      setProfileByNode((prev) => { const next = { ...prev }; delete next[nodeID]; return next; });
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to apply profile."));
-      setApplyingNodeID(null);
     }
   }
 
@@ -562,11 +553,11 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
                       {renderLifecycleButtons(node, runNodeAction, mutatingNodeID, mutatingAction)}
                       {profiles.length > 0 ? (
                         <>
-                          <select className="select-field" value={applyingNodeID === node.id ? selectedProfileID : ""} onChange={(e) => { setApplyingNodeID(node.id); setSelectedProfileID(e.target.value); }} aria-label="Select profile">
+                          <select className="select-field" value={profileByNode[node.id] ?? ""} onChange={(e) => setProfileByNode((prev) => ({ ...prev, [node.id]: e.target.value }))} aria-label="Select profile">
                             <option value="">Profile...</option>
                             {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                           </select>
-                          <button className="table-button" type="button" onClick={() => applyProfileToNode(node.id)} disabled={applyingNodeID === node.id && !selectedProfileID}>
+                          <button className="table-button" type="button" onClick={() => applyProfileToNode(node.id)} disabled={!profileByNode[node.id]}>
                             Apply
                           </button>
                         </>

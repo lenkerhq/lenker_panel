@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface ModalProps {
@@ -12,30 +12,39 @@ interface ModalProps {
 export function Modal({ isOpen, onClose, title, children, size = "medium" }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const hasInitialFocus = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const stableOnClose = useCallback(() => onCloseRef.current(), []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      hasInitialFocus.current = false;
+      return;
+    }
 
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
 
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        onClose();
+        stableOnClose();
       }
     }
 
     document.addEventListener("keydown", handleKey);
 
-    // Focus trap: focus first focusable element in dialog
-    const dialog = dialogRef.current;
-    if (dialog) {
-      const focusables = dialog.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusables.length > 0) {
-        focusables[0].focus();
+    // Focus first input in dialog only once on open
+    if (!hasInitialFocus.current) {
+      const dialog = dialogRef.current;
+      if (dialog) {
+        const firstInput = dialog.querySelector<HTMLElement>("input, select, textarea");
+        if (firstInput) {
+          firstInput.focus();
+        }
       }
+      hasInitialFocus.current = true;
     }
 
     return () => {
@@ -45,7 +54,7 @@ export function Modal({ isOpen, onClose, title, children, size = "medium" }: Mod
         previouslyFocused.current.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, stableOnClose]);
 
   if (!isOpen) return null;
 

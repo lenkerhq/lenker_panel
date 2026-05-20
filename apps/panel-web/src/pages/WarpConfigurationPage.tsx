@@ -60,6 +60,7 @@ export function WarpConfigurationPage({ session, onUnauthorized }: WarpConfigura
     try {
       const creds = await getNodeWarp(session, nodeID);
       setCredentials(creds);
+      setFormState({ privateKey: "", publicKey: creds.public_key, address: creds.address, endpoint: creds.endpoint || "" });
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
       if (error instanceof PanelApiError && error.status === 404) {
@@ -172,7 +173,7 @@ export function WarpConfigurationPage({ session, onUnauthorized }: WarpConfigura
               </div>
 
               <label className="field-label" htmlFor="warp-private-key">Private key</label>
-              <input id="warp-private-key" className="text-field" type="text" autoComplete="off" value={formState.privateKey} onChange={(e) => setFormState((cur) => ({ ...cur, privateKey: e.target.value }))} />
+              <input id="warp-private-key" className="text-field" type="text" autoComplete="off" placeholder={credentials ? "••• stored — enter new to replace" : ""} value={formState.privateKey} onChange={(e) => setFormState((cur) => ({ ...cur, privateKey: e.target.value }))} />
 
               <label className="field-label" htmlFor="warp-public-key">Public key</label>
               <input id="warp-public-key" className="text-field" type="text" autoComplete="off" value={formState.publicKey} onChange={(e) => setFormState((cur) => ({ ...cur, publicKey: e.target.value }))} />
