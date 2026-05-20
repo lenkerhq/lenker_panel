@@ -8,6 +8,7 @@ import {
   type NodeProfile,
   type NodeProfileRoutingRule,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
 
 interface NodeProfilesPageProps {
@@ -16,7 +17,6 @@ interface NodeProfilesPageProps {
 }
 
 type LoadState = "idle" | "loading" | "loaded" | "failed";
-type FormMode = "create" | "edit";
 
 interface RuleFormState {
   ruleType: string;
@@ -72,12 +72,77 @@ function buildRules(rules: RuleFormState[]): NodeProfileRoutingRule[] {
   }));
 }
 
+interface ProfileFormFieldsProps {
+  form: ProfileFormState;
+  onChange: (next: ProfileFormState) => void;
+  idPrefix: string;
+}
+
+function ProfileFormFields({ form, onChange, idPrefix }: ProfileFormFieldsProps) {
+  function addRule() { onChange({ ...form, rules: [...form.rules, emptyRule()] }); }
+  function removeRule(index: number) { onChange({ ...form, rules: form.rules.filter((_, i) => i !== index) }); }
+  function updateRule(index: number, field: keyof RuleFormState, value: string) {
+    onChange({ ...form, rules: form.rules.map((r, i) => (i === index ? { ...r, [field]: value } : r)) });
+  }
+
+  return (
+    <>
+      <label className="field-label" htmlFor={`${idPrefix}-name`}>Name</label>
+      <input id={`${idPrefix}-name`} className="text-field" type="text" autoComplete="off" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
+
+      <label className="field-label" htmlFor={`${idPrefix}-description`}>Description</label>
+      <input id={`${idPrefix}-description`} className="text-field" type="text" autoComplete="off" value={form.description} onChange={(e) => onChange({ ...form, description: e.target.value })} />
+
+      <div className="section-heading compact-heading">
+        <div><p className="eyebrow">Routing rules</p></div>
+        <button className="table-button" type="button" onClick={addRule}>Add rule</button>
+      </div>
+
+      {form.rules.map((rule, index) => (
+        <div key={index} className="form-grid rule-row">
+          <div>
+            <label className="field-label">Type</label>
+            <select className="select-field" value={rule.ruleType} onChange={(e) => updateRule(index, "ruleType", e.target.value)}>
+              <option value="geosite">geosite</option>
+              <option value="geoip">geoip</option>
+              <option value="domain">domain</option>
+              <option value="ip">ip</option>
+              <option value="port">port</option>
+              <option value="protocol">protocol</option>
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Target</label>
+            <input className="text-field" type="text" value={rule.target} onChange={(e) => updateRule(index, "target", e.target.value)} />
+          </div>
+          <div>
+            <label className="field-label">Action</label>
+            <select className="select-field" value={rule.action} onChange={(e) => updateRule(index, "action", e.target.value)}>
+              <option value="proxy">proxy</option>
+              <option value="direct">direct</option>
+              <option value="block">block</option>
+              <option value="warp">warp</option>
+            </select>
+          </div>
+          <div>
+            <label className="field-label">Priority</label>
+            <input className="text-field" type="number" value={rule.priority} onChange={(e) => updateRule(index, "priority", e.target.value)} />
+          </div>
+          <div>
+            <button className="table-button danger" type="button" onClick={() => removeRule(index)}>Remove</button>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPageProps) {
   const [profiles, setProfiles] = useState<NodeProfile[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [createForm, setCreateForm] = useState<ProfileFormState>(() => emptyProfileForm());
   const [editingProfile, setEditingProfile] = useState<NodeProfile | null>(null);
-  const [formState, setFormState] = useState<ProfileFormState>(() => emptyProfileForm());
+  const [editForm, setEditForm] = useState<ProfileFormState>(() => emptyProfileForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
@@ -120,66 +185,64 @@ export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPagePr
     return () => { isMounted = false; };
   }, [onUnauthorized, session]);
 
-  function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingProfile(null);
-    setFormState(emptyProfileForm());
-    setSuccessMessage(message ?? null);
-  }
-
-  function startEdit(profile: NodeProfile) {
-    setFormMode("edit");
+  function openEdit(profile: NodeProfile) {
+    if (profile.is_system) return;
     setEditingProfile(profile);
-    setFormState(profileToForm(profile));
+    setEditForm(profileToForm(profile));
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
-  function addRule() {
-    setFormState((cur) => ({ ...cur, rules: [...cur.rules, emptyRule()] }));
+  function closeEdit() {
+    setEditingProfile(null);
+    setEditForm(emptyProfileForm());
   }
 
-  function removeRule(index: number) {
-    setFormState((cur) => ({ ...cur, rules: cur.rules.filter((_, i) => i !== index) }));
-  }
-
-  function updateRule(index: number, field: keyof RuleFormState, value: string) {
-    setFormState((cur) => ({
-      ...cur,
-      rules: cur.rules.map((r, i) => (i === index ? { ...r, [field]: value } : r)),
-    }));
-  }
-
-  async function submitForm(event: FormEvent<HTMLFormElement>) {
+  async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateProfileForm(formState);
+    const validationError = validateProfileForm(createForm);
     if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
 
     setIsMutating(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
-      const config = { routing_rules: buildRules(formState.rules) };
-      if (formMode === "edit" && editingProfile) {
-        await updateNodeProfile(session, editingProfile.id, {
-          name: formState.name.trim(),
-          description: formState.description.trim() || undefined,
-          config,
-        });
-        resetForm("Profile updated.");
-      } else {
-        await createNodeProfile(session, {
-          name: formState.name.trim(),
-          description: formState.description.trim() || undefined,
-          config,
-        });
-        resetForm("Profile created.");
-      }
+      await createNodeProfile(session, {
+        name: createForm.name.trim(),
+        description: createForm.description.trim() || undefined,
+        config: { routing_rules: buildRules(createForm.rules) },
+      });
+      setCreateForm(emptyProfileForm());
+      setSuccessMessage("Profile created.");
       await loadData();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to save profile."));
+      setErrorMessage(formatPanelError(error, "Unable to create profile."));
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function submitEditForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingProfile) return;
+    const validationError = validateProfileForm(editForm);
+    if (validationError) { setErrorMessage(validationError); return; }
+
+    setIsMutating(true);
+    setErrorMessage(null);
+    try {
+      await updateNodeProfile(session, editingProfile.id, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || undefined,
+        config: { routing_rules: buildRules(editForm.rules) },
+      });
+      closeEdit();
+      setSuccessMessage("Profile updated.");
+      await loadData();
+    } catch (error) {
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to update profile."));
     } finally {
       setIsMutating(false);
     }
@@ -192,7 +255,7 @@ export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPagePr
     try {
       await deleteNodeProfile(session, profile.id);
       setSuccessMessage("Profile deleted.");
-      if (editingProfile?.id === profile.id) resetForm("Profile deleted.");
+      if (editingProfile?.id === profile.id) closeEdit();
       await loadData();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
@@ -217,66 +280,16 @@ export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPagePr
       </section>
 
       <section className="management-grid">
-        <form className="management-panel" onSubmit={submitForm}>
+        <form className="management-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit profile" : "New profile"}</p>
-              <h3>{formMode === "edit" ? editingProfile?.name : "Create profile"}</h3>
+              <p className="eyebrow">New profile</p>
+              <h3>Create profile</h3>
             </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>Cancel</button>
-            ) : null}
           </div>
-
-          <label className="field-label" htmlFor="profile-name">Name</label>
-          <input id="profile-name" className="text-field" type="text" autoComplete="off" value={formState.name} onChange={(e) => setFormState((cur) => ({ ...cur, name: e.target.value }))} />
-
-          <label className="field-label" htmlFor="profile-description">Description</label>
-          <input id="profile-description" className="text-field" type="text" autoComplete="off" value={formState.description} onChange={(e) => setFormState((cur) => ({ ...cur, description: e.target.value }))} />
-
-          <div className="section-heading compact-heading">
-            <div><p className="eyebrow">Routing rules</p></div>
-            <button className="table-button" type="button" onClick={addRule}>Add rule</button>
-          </div>
-
-          {formState.rules.map((rule, index) => (
-            <div key={index} className="form-grid rule-row">
-              <div>
-                <label className="field-label">Type</label>
-                <select className="select-field" value={rule.ruleType} onChange={(e) => updateRule(index, "ruleType", e.target.value)}>
-                  <option value="geosite">geosite</option>
-                  <option value="geoip">geoip</option>
-                  <option value="domain">domain</option>
-                  <option value="ip">ip</option>
-                  <option value="port">port</option>
-                  <option value="protocol">protocol</option>
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Target</label>
-                <input className="text-field" type="text" value={rule.target} onChange={(e) => updateRule(index, "target", e.target.value)} />
-              </div>
-              <div>
-                <label className="field-label">Action</label>
-                <select className="select-field" value={rule.action} onChange={(e) => updateRule(index, "action", e.target.value)}>
-                  <option value="proxy">proxy</option>
-                  <option value="direct">direct</option>
-                  <option value="block">block</option>
-                  <option value="warp">warp</option>
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Priority</label>
-                <input className="text-field" type="number" value={rule.priority} onChange={(e) => updateRule(index, "priority", e.target.value)} />
-              </div>
-              <div>
-                <button className="table-button danger" type="button" onClick={() => removeRule(index)}>Remove</button>
-              </div>
-            </div>
-          ))}
-
+          <ProfileFormFields form={createForm} onChange={setCreateForm} idPrefix="profile-create" />
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create profile"}
+            {isMutating ? "Saving..." : "Create profile"}
           </button>
         </form>
 
@@ -308,15 +321,15 @@ export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPagePr
             </thead>
             <tbody>
               {profiles.map((profile) => (
-                <tr key={profile.id}>
+                <tr key={profile.id} className={profile.is_system ? undefined : "clickable-row"} onClick={profile.is_system ? undefined : () => openEdit(profile)}>
                   <td>{profile.name}</td>
                   <td>{profile.description || "-"}</td>
                   <td>{profile.config.routing_rules?.length ?? 0}</td>
                   <td>{profile.is_system ? "yes" : "no"}</td>
                   <td className="mono-cell">{profile.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(profile)} disabled={isMutating || profile.is_system}>Edit</button>
+                      <button className="table-button" type="button" onClick={() => openEdit(profile)} disabled={isMutating || profile.is_system}>Edit</button>
                       <button className="table-button danger" type="button" onClick={() => deleteProfile(profile)} disabled={profile.is_system || mutatingID === profile.id}>
                         {mutatingID === profile.id ? "Deleting..." : "Delete"}
                       </button>
@@ -328,6 +341,24 @@ export function NodeProfilesPage({ session, onUnauthorized }: NodeProfilesPagePr
           </table>
         </div>
       ) : null}
+
+      <Modal isOpen={editingProfile !== null} onClose={closeEdit} title={editingProfile ? `Edit ${editingProfile.name}` : ""} size="large">
+        {editingProfile ? (
+          <form onSubmit={submitEditForm}>
+            <ProfileFormFields form={editForm} onChange={setEditForm} idPrefix="profile-edit" />
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              <button className="table-button danger" type="button" onClick={() => deleteProfile(editingProfile)} disabled={mutatingID === editingProfile.id}>
+                {mutatingID === editingProfile.id ? "Deleting..." : "Delete"}
+              </button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }

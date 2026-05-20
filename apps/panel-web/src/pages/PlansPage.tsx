@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { archivePlan, createPlan, listPlans, PanelApiError, updatePlan, type Plan } from "../lib/api";
+import { Modal } from "../components/Modal";
 import {
   buildCreatePlanInput,
   buildUpdatePlanInput,
@@ -16,14 +17,13 @@ interface PlansPageProps {
 }
 
 type LoadState = "idle" | "loading" | "loaded" | "failed";
-type FormMode = "create" | "edit";
 
 export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [createFormState, setCreateFormState] = useState<PlanFormState>(() => emptyPlanForm());
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [formState, setFormState] = useState<PlanFormState>(() => emptyPlanForm());
+  const [editFormState, setEditFormState] = useState<PlanFormState>(() => emptyPlanForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
@@ -34,15 +34,12 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
   const loadPlans = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
-
     try {
-      const loadedPlans = await listPlans(session);
-      setPlans(loadedPlans);
+      const loaded = await listPlans(session);
+      setPlans(loaded);
       setLoadState("loaded");
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to load plans."));
       setLoadState("failed");
     }
@@ -50,88 +47,82 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
 
   useEffect(() => {
     let isMounted = true;
-
-    async function loadInitialPlans() {
+    async function load() {
       setLoadState("loading");
       setErrorMessage(null);
-
       try {
-        const loadedPlans = await listPlans(session);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setPlans(loadedPlans);
+        const loaded = await listPlans(session);
+        if (!isMounted) return;
+        setPlans(loaded);
         setLoadState("loaded");
       } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        if (handleUnauthorizedError(error, onUnauthorized)) {
-          return;
-        }
-
+        if (!isMounted) return;
+        if (handleUnauthorizedError(error, onUnauthorized)) return;
         setErrorMessage(formatPanelError(error, "Unable to load plans."));
         setLoadState("failed");
       }
     }
-
-    loadInitialPlans();
-
-    return () => {
-      isMounted = false;
-    };
+    load();
+    return () => { isMounted = false; };
   }, [onUnauthorized, session]);
 
-  function updateFormField(fieldName: keyof PlanFormState, value: string | boolean) {
-    setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
+  function updateCreateField(fieldName: keyof PlanFormState, value: string | boolean) {
+    setCreateFormState((c) => ({ ...c, [fieldName]: value }));
   }
 
-  function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingPlan(null);
-    setFormState(emptyPlanForm());
-    setSuccessMessage(message ?? null);
+  function updateEditField(fieldName: keyof PlanFormState, value: string | boolean) {
+    setEditFormState((c) => ({ ...c, [fieldName]: value }));
   }
 
-  function startEdit(plan: Plan) {
-    setFormMode("edit");
+  function openEdit(plan: Plan) {
     setEditingPlan(plan);
-    setFormState(planToForm(plan));
+    setEditFormState(planToForm(plan));
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
-  async function submitPlanForm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function closeEdit() {
+    setEditingPlan(null);
+    setEditFormState(emptyPlanForm());
+  }
 
-    const validationError = validatePlanForm(formState);
-    if (validationError) {
-      setErrorMessage(validationError);
-      setSuccessMessage(null);
-      return;
-    }
+  async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const validationError = validatePlanForm(createFormState);
+    if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
 
     setIsMutating(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
-      if (formMode === "edit" && editingPlan) {
-        await updatePlan(session, editingPlan.id, buildUpdatePlanInput(formState));
-        resetForm("Plan updated.");
-      } else {
-        await createPlan(session, buildCreatePlanInput(formState));
-        resetForm("Plan created.");
-      }
+      await createPlan(session, buildCreatePlanInput(createFormState));
+      setCreateFormState(emptyPlanForm());
+      setSuccessMessage("Plan created.");
       await loadPlans();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to save plan."));
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to create plan."));
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function submitEditForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingPlan) return;
+    const validationError = validatePlanForm(editFormState);
+    if (validationError) { setErrorMessage(validationError); return; }
+
+    setIsMutating(true);
+    setErrorMessage(null);
+    try {
+      await updatePlan(session, editingPlan.id, buildUpdatePlanInput(editFormState));
+      closeEdit();
+      setSuccessMessage("Plan updated.");
+      await loadPlans();
+    } catch (error) {
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to update plan."));
     } finally {
       setIsMutating(false);
     }
@@ -141,18 +132,13 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
     setMutatingPlanID(plan.id);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
       await archivePlan(session, plan.id);
       setSuccessMessage("Plan archived.");
-      if (editingPlan?.id === plan.id) {
-        resetForm("Plan archived.");
-      }
+      if (editingPlan?.id === plan.id) closeEdit();
       await loadPlans();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to archive plan."));
     } finally {
       setMutatingPlanID(null);
@@ -174,91 +160,42 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
       </section>
 
       <section className="management-grid">
-        <form className="management-panel" onSubmit={submitPlanForm}>
+        <form className="management-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit plan" : "New plan"}</p>
-              <h3>{formMode === "edit" ? editingPlan?.name : "Create plan"}</h3>
+              <p className="eyebrow">New plan</p>
+              <h3>Create plan</h3>
             </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>
-                Cancel
-              </button>
-            ) : null}
           </div>
 
-          <label className="field-label" htmlFor="plan-name">
-            Name
-          </label>
-          <input
-            id="plan-name"
-            className="text-field"
-            type="text"
-            autoComplete="off"
-            value={formState.name}
-            onChange={(event) => updateFormField("name", event.target.value)}
-          />
+          <label className="field-label" htmlFor="plan-name">Name</label>
+          <input id="plan-name" className="text-field" type="text" autoComplete="off" value={createFormState.name} onChange={(e) => updateCreateField("name", e.target.value)} />
 
           <div className="form-grid">
             <div>
-              <label className="field-label" htmlFor="plan-duration-days">
-                Duration days
-              </label>
-              <input
-                id="plan-duration-days"
-                className="text-field"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={formState.durationDays}
-                onChange={(event) => updateFormField("durationDays", event.target.value)}
-              />
+              <label className="field-label" htmlFor="plan-duration-days">Duration days</label>
+              <input id="plan-duration-days" className="text-field" type="number" min="1" inputMode="numeric" value={createFormState.durationDays} onChange={(e) => updateCreateField("durationDays", e.target.value)} />
             </div>
             <div>
-              <label className="field-label" htmlFor="plan-device-limit">
-                Device limit
-              </label>
-              <input
-                id="plan-device-limit"
-                className="text-field"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={formState.deviceLimit}
-                onChange={(event) => updateFormField("deviceLimit", event.target.value)}
-              />
+              <label className="field-label" htmlFor="plan-device-limit">Device limit</label>
+              <input id="plan-device-limit" className="text-field" type="number" min="1" inputMode="numeric" value={createFormState.deviceLimit} onChange={(e) => updateCreateField("deviceLimit", e.target.value)} />
             </div>
           </div>
 
           <label className="check-row" htmlFor="plan-has-traffic-limit">
-            <input
-              id="plan-has-traffic-limit"
-              type="checkbox"
-              checked={formState.hasTrafficLimit}
-              onChange={(event) => updateFormField("hasTrafficLimit", event.target.checked)}
-            />
+            <input id="plan-has-traffic-limit" type="checkbox" checked={createFormState.hasTrafficLimit} onChange={(e) => updateCreateField("hasTrafficLimit", e.target.checked)} />
             <span>Set traffic limit</span>
           </label>
 
-          {formState.hasTrafficLimit ? (
+          {createFormState.hasTrafficLimit ? (
             <>
-              <label className="field-label" htmlFor="plan-traffic-limit">
-                Traffic limit bytes
-              </label>
-              <input
-                id="plan-traffic-limit"
-                className="text-field"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={formState.trafficLimitBytes}
-                onChange={(event) => updateFormField("trafficLimitBytes", event.target.value)}
-              />
+              <label className="field-label" htmlFor="plan-traffic-limit">Traffic limit bytes</label>
+              <input id="plan-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={createFormState.trafficLimitBytes} onChange={(e) => updateCreateField("trafficLimitBytes", e.target.value)} />
             </>
           ) : null}
 
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create plan"}
+            {isMutating ? "Saving..." : "Create plan"}
           </button>
         </form>
 
@@ -266,14 +203,10 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
           <p className="eyebrow">State</p>
           {loadState === "loading" ? <p className="state-text">Loading plans...</p> : null}
           {loadState === "failed" ? <p className="error-text">{errorMessage}</p> : null}
-          {loadState === "loaded" && !errorMessage && !successMessage ? (
-            <p className="state-text">Plans list is ready.</p>
-          ) : null}
+          {loadState === "loaded" && !errorMessage && !successMessage ? <p className="state-text">Plans list is ready.</p> : null}
           {errorMessage && loadState !== "failed" ? <p className="error-text">{errorMessage}</p> : null}
           {successMessage ? <p className="success-text">{successMessage}</p> : null}
-          <button className="secondary-button" type="button" onClick={loadPlans} disabled={loadState === "loading"}>
-            Refresh
-          </button>
+          <button className="secondary-button" type="button" onClick={loadPlans} disabled={loadState === "loading"}>Refresh</button>
         </div>
       </section>
 
@@ -295,7 +228,7 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
             </thead>
             <tbody>
               {plans.map((plan) => (
-                <tr key={plan.id}>
+                <tr key={plan.id} className="clickable-row" onClick={() => openEdit(plan)}>
                   <td>{plan.name}</td>
                   <td>{plan.duration_days} days</td>
                   <td>{plan.device_limit}</td>
@@ -304,17 +237,10 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
                     <span className={`status-badge status-${plan.status}`}>{plan.status}</span>
                   </td>
                   <td className="mono-cell">{plan.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(plan)} disabled={isMutating}>
-                        Edit
-                      </button>
-                      <button
-                        className="table-button danger"
-                        type="button"
-                        onClick={() => archiveSelectedPlan(plan)}
-                        disabled={plan.status === "archived" || mutatingPlanID === plan.id}
-                      >
+                      <button className="table-button" type="button" onClick={() => openEdit(plan)} disabled={isMutating}>Edit</button>
+                      <button className="table-button danger" type="button" onClick={() => archiveSelectedPlan(plan)} disabled={plan.status === "archived" || mutatingPlanID === plan.id}>
                         {mutatingPlanID === plan.id ? "Archiving..." : plan.status === "archived" ? "Archived" : "Archive"}
                       </button>
                     </div>
@@ -325,28 +251,70 @@ export function PlansPage({ session, onUnauthorized }: PlansPageProps) {
           </table>
         </div>
       ) : null}
+
+      <Modal isOpen={editingPlan !== null} onClose={closeEdit} title={editingPlan ? `Edit ${editingPlan.name}` : ""} size="medium">
+        {editingPlan ? (
+          <form onSubmit={submitEditForm}>
+            <label className="field-label" htmlFor="plan-edit-name">Name</label>
+            <input id="plan-edit-name" className="text-field" type="text" autoComplete="off" value={editFormState.name} onChange={(e) => updateEditField("name", e.target.value)} />
+
+            <div className="form-grid">
+              <div>
+                <label className="field-label" htmlFor="plan-edit-duration-days">Duration days</label>
+                <input id="plan-edit-duration-days" className="text-field" type="number" min="1" inputMode="numeric" value={editFormState.durationDays} onChange={(e) => updateEditField("durationDays", e.target.value)} />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="plan-edit-device-limit">Device limit</label>
+                <input id="plan-edit-device-limit" className="text-field" type="number" min="1" inputMode="numeric" value={editFormState.deviceLimit} onChange={(e) => updateEditField("deviceLimit", e.target.value)} />
+              </div>
+            </div>
+
+            <label className="check-row" htmlFor="plan-edit-has-traffic-limit">
+              <input id="plan-edit-has-traffic-limit" type="checkbox" checked={editFormState.hasTrafficLimit} onChange={(e) => updateEditField("hasTrafficLimit", e.target.checked)} />
+              <span>Set traffic limit</span>
+            </label>
+
+            {editFormState.hasTrafficLimit ? (
+              <>
+                <label className="field-label" htmlFor="plan-edit-traffic-limit">Traffic limit bytes</label>
+                <input id="plan-edit-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={editFormState.trafficLimitBytes} onChange={(e) => updateEditField("trafficLimitBytes", e.target.value)} />
+              </>
+            ) : null}
+
+            <div className="check-row">
+              <span>Status:</span>
+              <span className={`status-badge status-${editingPlan.status}`}>{editingPlan.status}</span>
+            </div>
+
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              <button className="table-button danger" type="button" onClick={() => archiveSelectedPlan(editingPlan)} disabled={editingPlan.status === "archived" || mutatingPlanID === editingPlan.id}>
+                {mutatingPlanID === editingPlan.id ? "Archiving..." : editingPlan.status === "archived" ? "Archived" : "Archive"}
+              </button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }
 
 function formatTrafficLimit(value: number | null): string {
-  if (value === null) {
-    return "Unlimited";
-  }
+  if (value === null) return "Unlimited";
   return new Intl.NumberFormat(undefined).format(value);
 }
 
 function handleUnauthorizedError(error: unknown, onUnauthorized: () => void): boolean {
-  if (error instanceof PanelApiError && error.status === 401) {
-    onUnauthorized();
-    return true;
-  }
+  if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return true; }
   return false;
 }
 
 function formatPanelError(error: unknown, fallbackMessage: string): string {
-  if (error instanceof PanelApiError) {
-    return `${error.message} (${error.code})`;
-  }
+  if (error instanceof PanelApiError) return `${error.message} (${error.code})`;
   return error instanceof Error ? error.message : fallbackMessage;
 }

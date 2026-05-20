@@ -16,6 +16,7 @@ import {
   type RoutingRuleAction,
   type RoutingRuleType,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
 
 interface RoutingRulesPageProps {
@@ -24,7 +25,6 @@ interface RoutingRulesPageProps {
 }
 
 type Tab = "global" | "node";
-type FormMode = "create" | "edit";
 
 interface RuleFormState {
   ruleType: RoutingRuleType;
@@ -59,14 +59,71 @@ function validateRuleForm(form: RuleFormState): string | null {
   return null;
 }
 
+interface RuleFormFieldsProps {
+  form: RuleFormState;
+  onChange: (next: RuleFormState) => void;
+  idPrefix: string;
+}
+
+function RuleFormFields({ form, onChange, idPrefix }: RuleFormFieldsProps) {
+  return (
+    <>
+      <div className="form-grid">
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-type`}>Type</label>
+          <select id={`${idPrefix}-type`} className="select-field" value={form.ruleType} onChange={(e) => onChange({ ...form, ruleType: e.target.value as RoutingRuleType })}>
+            <option value="geosite">geosite</option>
+            <option value="geoip">geoip</option>
+            <option value="domain">domain</option>
+            <option value="ip">ip</option>
+            <option value="port">port</option>
+            <option value="protocol">protocol</option>
+          </select>
+        </div>
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-action`}>Action</label>
+          <select id={`${idPrefix}-action`} className="select-field" value={form.action} onChange={(e) => onChange({ ...form, action: e.target.value as RoutingRuleAction })}>
+            <option value="proxy">proxy</option>
+            <option value="direct">direct</option>
+            <option value="block">block</option>
+            <option value="warp">warp</option>
+          </select>
+        </div>
+      </div>
+
+      <label className="field-label" htmlFor={`${idPrefix}-target`}>Target</label>
+      <input id={`${idPrefix}-target`} className="text-field" type="text" autoComplete="off" value={form.target} onChange={(e) => onChange({ ...form, target: e.target.value })} />
+
+      <div className="form-grid">
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-outbound`}>Outbound tag (optional)</label>
+          <input id={`${idPrefix}-outbound`} className="text-field" type="text" autoComplete="off" value={form.outboundTag} onChange={(e) => onChange({ ...form, outboundTag: e.target.value })} />
+        </div>
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-priority`}>Priority</label>
+          <input id={`${idPrefix}-priority`} className="text-field" type="number" min="0" value={form.priority} onChange={(e) => onChange({ ...form, priority: e.target.value })} />
+        </div>
+      </div>
+
+      <label className="check-row" htmlFor={`${idPrefix}-enabled`}>
+        <input id={`${idPrefix}-enabled`} type="checkbox" checked={form.enabled} onChange={(e) => onChange({ ...form, enabled: e.target.checked })} />
+        <span>Enabled</span>
+      </label>
+
+      <label className="field-label" htmlFor={`${idPrefix}-description`}>Description (optional)</label>
+      <input id={`${idPrefix}-description`} className="text-field" type="text" autoComplete="off" value={form.description} onChange={(e) => onChange({ ...form, description: e.target.value })} />
+    </>
+  );
+}
+
 export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPageProps) {
   const [tab, setTab] = useState<Tab>("global");
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [selectedNodeID, setSelectedNodeID] = useState<string>("");
   const [rules, setRules] = useState<RoutingRule[]>([]);
-  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [createForm, setCreateForm] = useState<RuleFormState>(() => emptyRuleForm());
   const [editingRule, setEditingRule] = useState<RoutingRule | null>(null);
-  const [formState, setFormState] = useState<RuleFormState>(() => emptyRuleForm());
+  const [editForm, setEditForm] = useState<RuleFormState>(() => emptyRuleForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
@@ -97,71 +154,92 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
 
   useEffect(() => { loadRules(); }, [loadRules]);
 
-  function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingRule(null);
-    setFormState(emptyRuleForm());
-    setSuccessMessage(message ?? null);
-  }
-
-  function startEdit(rule: RoutingRule) {
-    setFormMode("edit");
+  function openEdit(rule: RoutingRule) {
+    if (tab === "node" && rule.node_id === null) return; // read-only inherited
     setEditingRule(rule);
-    setFormState(ruleToForm(rule));
+    setEditForm(ruleToForm(rule));
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
+  function closeEdit() {
+    setEditingRule(null);
+    setEditForm(emptyRuleForm());
+  }
+
   function switchTab(newTab: Tab) {
     setTab(newTab);
-    resetForm();
+    setCreateForm(emptyRuleForm());
+    closeEdit();
     setRules([]);
   }
 
   function selectNode(nodeID: string) {
     setSelectedNodeID(nodeID);
-    resetForm();
+    setCreateForm(emptyRuleForm());
+    closeEdit();
   }
 
-  async function submitForm(event: FormEvent<HTMLFormElement>) {
+  function buildInput(form: RuleFormState) {
+    return {
+      rule_type: form.ruleType,
+      target: form.target.trim(),
+      action: form.action,
+      outbound_tag: form.outboundTag.trim() || undefined,
+      priority: parseInt(form.priority, 10),
+      enabled: form.enabled,
+      description: form.description.trim() || undefined,
+    };
+  }
+
+  async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const err = validateRuleForm(formState);
+    if (tab === "node" && !selectedNodeID) { setErrorMessage("Select a node first."); return; }
+    const err = validateRuleForm(createForm);
     if (err) { setErrorMessage(err); setSuccessMessage(null); return; }
 
     setIsMutating(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-
-    const input = {
-      rule_type: formState.ruleType,
-      target: formState.target.trim(),
-      action: formState.action,
-      outbound_tag: formState.outboundTag.trim() || undefined,
-      priority: parseInt(formState.priority, 10),
-      enabled: formState.enabled,
-      description: formState.description.trim() || undefined,
-    };
-
     try {
-      if (formMode === "edit" && editingRule) {
-        if (tab === "global") {
-          await updateGlobalRoutingRule(session, editingRule.id, input);
-        } else {
-          await updateNodeRoutingRule(session, selectedNodeID, editingRule.id, input);
-        }
-        resetForm("Rule updated.");
+      const input = buildInput(createForm);
+      if (tab === "global") {
+        await createGlobalRoutingRule(session, input);
       } else {
-        if (tab === "global") {
-          await createGlobalRoutingRule(session, input);
-        } else {
-          await createNodeRoutingRule(session, selectedNodeID, input);
-        }
-        resetForm("Rule created.");
+        await createNodeRoutingRule(session, selectedNodeID, input);
       }
+      setCreateForm(emptyRuleForm());
+      setSuccessMessage("Rule created.");
       await loadRules();
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to save rule."));
+      setErrorMessage(formatError(error, "Unable to create rule."));
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function submitEditForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingRule) return;
+    const err = validateRuleForm(editForm);
+    if (err) { setErrorMessage(err); return; }
+
+    setIsMutating(true);
+    setErrorMessage(null);
+    try {
+      const input = buildInput(editForm);
+      if (tab === "global") {
+        await updateGlobalRoutingRule(session, editingRule.id, input);
+      } else {
+        await updateNodeRoutingRule(session, selectedNodeID, editingRule.id, input);
+      }
+      closeEdit();
+      setSuccessMessage("Rule updated.");
+      await loadRules();
+    } catch (error) {
+      if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
+      setErrorMessage(formatError(error, "Unable to update rule."));
     } finally {
       setIsMutating(false);
     }
@@ -178,7 +256,7 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
         await deleteNodeRoutingRule(session, selectedNodeID, rule.id);
       }
       setSuccessMessage("Rule deleted.");
-      if (editingRule?.id === rule.id) resetForm("Rule deleted.");
+      if (editingRule?.id === rule.id) closeEdit();
       await loadRules();
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
@@ -241,64 +319,16 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
       ) : null}
 
       <section className="management-grid">
-        <form className="management-panel" onSubmit={submitForm}>
+        <form className="management-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit rule" : "New rule"}</p>
-              <h3>{formMode === "edit" ? `Edit ${editingRule?.target}` : "Create rule"}</h3>
-            </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>Cancel</button>
-            ) : null}
-          </div>
-
-          <div className="form-grid">
-            <div>
-              <label className="field-label" htmlFor="rule-type">Type</label>
-              <select id="rule-type" className="select-field" value={formState.ruleType} onChange={(e) => setFormState((c) => ({ ...c, ruleType: e.target.value as RoutingRuleType }))}>
-                <option value="geosite">geosite</option>
-                <option value="geoip">geoip</option>
-                <option value="domain">domain</option>
-                <option value="ip">ip</option>
-                <option value="port">port</option>
-                <option value="protocol">protocol</option>
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rule-action">Action</label>
-              <select id="rule-action" className="select-field" value={formState.action} onChange={(e) => setFormState((c) => ({ ...c, action: e.target.value as RoutingRuleAction }))}>
-                <option value="proxy">proxy</option>
-                <option value="direct">direct</option>
-                <option value="block">block</option>
-                <option value="warp">warp</option>
-              </select>
+              <p className="eyebrow">New rule</p>
+              <h3>Create rule</h3>
             </div>
           </div>
-
-          <label className="field-label" htmlFor="rule-target">Target</label>
-          <input id="rule-target" className="text-field" type="text" autoComplete="off" value={formState.target} onChange={(e) => setFormState((c) => ({ ...c, target: e.target.value }))} />
-
-          <div className="form-grid">
-            <div>
-              <label className="field-label" htmlFor="rule-outbound">Outbound tag (optional)</label>
-              <input id="rule-outbound" className="text-field" type="text" autoComplete="off" value={formState.outboundTag} onChange={(e) => setFormState((c) => ({ ...c, outboundTag: e.target.value }))} />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="rule-priority">Priority</label>
-              <input id="rule-priority" className="text-field" type="number" min="0" value={formState.priority} onChange={(e) => setFormState((c) => ({ ...c, priority: e.target.value }))} />
-            </div>
-          </div>
-
-          <label className="check-row" htmlFor="rule-enabled">
-            <input id="rule-enabled" type="checkbox" checked={formState.enabled} onChange={(e) => setFormState((c) => ({ ...c, enabled: e.target.checked }))} />
-            <span>Enabled</span>
-          </label>
-
-          <label className="field-label" htmlFor="rule-description">Description (optional)</label>
-          <input id="rule-description" className="text-field" type="text" autoComplete="off" value={formState.description} onChange={(e) => setFormState((c) => ({ ...c, description: e.target.value }))} />
-
+          <RuleFormFields form={createForm} onChange={setCreateForm} idPrefix="rule-create" />
           <button className="primary-button" type="submit" disabled={isMutating || (tab === "node" && !selectedNodeID)}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create rule"}
+            {isMutating ? "Saving..." : "Create rule"}
           </button>
         </form>
 
@@ -337,38 +367,59 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
               </tr>
             </thead>
             <tbody>
-              {rules.map((rule, index) => (
-                <tr key={rule.id}>
-                  {tab === "node" ? (
-                    <td>
+              {rules.map((rule, index) => {
+                const editable = !(tab === "node" && rule.node_id === null);
+                return (
+                  <tr key={rule.id} className={editable ? "clickable-row" : undefined} onClick={editable ? () => openEdit(rule) : undefined}>
+                    {tab === "node" ? (
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <div className="row-actions">
+                          <button className="table-button" type="button" onClick={() => moveRule(index, -1)} disabled={index === 0 || rule.node_id === null}>↑</button>
+                          <button className="table-button" type="button" onClick={() => moveRule(index, 1)} disabled={index === rules.length - 1 || rule.node_id === null}>↓</button>
+                        </div>
+                      </td>
+                    ) : null}
+                    <td>{rule.rule_type}</td>
+                    <td>{rule.target}</td>
+                    <td>{rule.action}</td>
+                    <td>{rule.outbound_tag || "-"}</td>
+                    <td>{rule.priority}</td>
+                    <td>{rule.enabled ? "yes" : "no"}</td>
+                    <td>{rule.description || "-"}</td>
+                    <td>{rule.node_id ? "node" : "global"}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <div className="row-actions">
-                        <button className="table-button" type="button" onClick={() => moveRule(index, -1)} disabled={index === 0 || rule.node_id === null}>↑</button>
-                        <button className="table-button" type="button" onClick={() => moveRule(index, 1)} disabled={index === rules.length - 1 || rule.node_id === null}>↓</button>
+                        <button className="table-button" type="button" onClick={() => openEdit(rule)} disabled={isMutating || !editable}>Edit</button>
+                        <button className="table-button danger" type="button" onClick={() => deleteRule(rule)} disabled={mutatingID === rule.id || !editable}>
+                          {mutatingID === rule.id ? "Deleting..." : "Delete"}
+                        </button>
                       </div>
                     </td>
-                  ) : null}
-                  <td>{rule.rule_type}</td>
-                  <td>{rule.target}</td>
-                  <td>{rule.action}</td>
-                  <td>{rule.outbound_tag || "-"}</td>
-                  <td>{rule.priority}</td>
-                  <td>{rule.enabled ? "yes" : "no"}</td>
-                  <td>{rule.description || "-"}</td>
-                  <td>{rule.node_id ? "node" : "global"}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(rule)} disabled={isMutating || (tab === "node" && rule.node_id === null)}>Edit</button>
-                      <button className="table-button danger" type="button" onClick={() => deleteRule(rule)} disabled={mutatingID === rule.id || (tab === "node" && rule.node_id === null)}>
-                        {mutatingID === rule.id ? "Deleting..." : "Delete"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       ) : null}
+
+      <Modal isOpen={editingRule !== null} onClose={closeEdit} title={editingRule ? `Edit rule: ${editingRule.target}` : ""} size="medium">
+        {editingRule ? (
+          <form onSubmit={submitEditForm}>
+            <RuleFormFields form={editForm} onChange={setEditForm} idPrefix="rule-edit" />
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              <button className="table-button danger" type="button" onClick={() => deleteRule(editingRule)} disabled={mutatingID === editingRule.id}>
+                {mutatingID === editingRule.id ? "Deleting..." : "Delete"}
+              </button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }

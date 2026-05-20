@@ -38,6 +38,7 @@ import {
   type TrafficUsage,
   type User,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
 import {
   buildCreateSubscriptionInput,
@@ -425,14 +426,9 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
         <form className="management-panel" onSubmit={submitSubscriptionForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit subscription" : "New subscription"}</p>
-              <h3>{formMode === "edit" ? editingSubscription?.id : "Create subscription"}</h3>
+              <p className="eyebrow">New subscription</p>
+              <h3>Create subscription</h3>
             </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>
-                Cancel
-              </button>
-            ) : null}
           </div>
 
           {formMode === "create" ? (
@@ -488,63 +484,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
                 ))}
               </select>
             </>
-          ) : (
-            <>
-              <label className="field-label" htmlFor="subscription-status">
-                Status
-              </label>
-              <select
-                id="subscription-status"
-                className="select-field"
-                value={formState.status}
-                onChange={(event) => updateFormField("status", event.target.value as SubscriptionStatus)}
-              >
-                <option value="active">active</option>
-                <option value="expired">expired</option>
-                <option value="suspended">suspended</option>
-              </select>
-
-              <label className="field-label" htmlFor="subscription-device-limit">
-                Device limit
-              </label>
-              <input
-                id="subscription-device-limit"
-                className="text-field"
-                type="number"
-                min="1"
-                inputMode="numeric"
-                value={formState.deviceLimit}
-                onChange={(event) => updateFormField("deviceLimit", event.target.value)}
-              />
-
-              <label className="check-row" htmlFor="subscription-has-traffic-limit">
-                <input
-                  id="subscription-has-traffic-limit"
-                  type="checkbox"
-                  checked={formState.hasTrafficLimit}
-                  onChange={(event) => updateFormField("hasTrafficLimit", event.target.checked)}
-                />
-                <span>Set traffic limit</span>
-              </label>
-
-              {formState.hasTrafficLimit ? (
-                <>
-                  <label className="field-label" htmlFor="subscription-traffic-limit">
-                    Traffic limit bytes
-                  </label>
-                  <input
-                    id="subscription-traffic-limit"
-                    className="text-field"
-                    type="number"
-                    min="1"
-                    inputMode="numeric"
-                    value={formState.trafficLimitBytes}
-                    onChange={(event) => updateFormField("trafficLimitBytes", event.target.value)}
-                  />
-                </>
-              ) : null}
-            </>
-          )}
+          ) : null}
 
           <label className="check-row" htmlFor="subscription-has-preferred-region">
             <input
@@ -586,7 +526,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
           />
 
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create subscription"}
+            {isMutating ? "Saving..." : "Create subscription"}
           </button>
         </form>
 
@@ -627,7 +567,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
             </thead>
             <tbody>
               {subscriptions.map((subscription) => (
-                <tr key={subscription.id}>
+                <tr key={subscription.id} className="clickable-row" onClick={() => startEdit(subscription)}>
                   <td>{userLabel(users, subscription.user_id)}</td>
                   <td>{planLabel(plans, subscription.plan_id)}</td>
                   <td>
@@ -638,7 +578,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
                   <td>{subscription.device_limit}</td>
                   <td>{subscription.preferred_region || "-"}</td>
                   <td className="mono-cell">{subscription.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
                       <button className="table-button" type="button" onClick={() => startEdit(subscription)} disabled={isMutating}>
                         Edit
@@ -860,6 +800,55 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
       {subscriptionAccess ? (
         <TrafficSection session={session} subscriptionID={subscriptionAccess.subscription_id} onUnauthorized={onUnauthorized} />
       ) : null}
+
+      <Modal isOpen={formMode === "edit" && editingSubscription !== null} onClose={() => resetForm()} title={editingSubscription ? `Edit subscription ${editingSubscription.id.slice(0, 8)}…` : ""} size="medium">
+        {editingSubscription ? (
+          <form onSubmit={submitSubscriptionForm}>
+            <label className="field-label" htmlFor="sub-edit-status">Status</label>
+            <select id="sub-edit-status" className="select-field" value={formState.status} onChange={(e) => updateFormField("status", e.target.value as SubscriptionStatus)}>
+              <option value="active">active</option>
+              <option value="expired">expired</option>
+              <option value="suspended">suspended</option>
+            </select>
+
+            <label className="field-label" htmlFor="sub-edit-device-limit">Device limit</label>
+            <input id="sub-edit-device-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.deviceLimit} onChange={(e) => updateFormField("deviceLimit", e.target.value)} />
+
+            <label className="check-row" htmlFor="sub-edit-has-traffic-limit">
+              <input id="sub-edit-has-traffic-limit" type="checkbox" checked={formState.hasTrafficLimit} onChange={(e) => updateFormField("hasTrafficLimit", e.target.checked)} />
+              <span>Set traffic limit</span>
+            </label>
+
+            {formState.hasTrafficLimit ? (
+              <>
+                <label className="field-label" htmlFor="sub-edit-traffic-limit">Traffic limit bytes</label>
+                <input id="sub-edit-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.trafficLimitBytes} onChange={(e) => updateFormField("trafficLimitBytes", e.target.value)} />
+              </>
+            ) : null}
+
+            <label className="check-row" htmlFor="sub-edit-has-preferred-region">
+              <input id="sub-edit-has-preferred-region" type="checkbox" checked={formState.hasPreferredRegion} onChange={(e) => updateFormField("hasPreferredRegion", e.target.checked)} />
+              <span>Set preferred region</span>
+            </label>
+
+            {formState.hasPreferredRegion ? (
+              <>
+                <label className="field-label" htmlFor="sub-edit-preferred-region">Preferred region</label>
+                <input id="sub-edit-preferred-region" className="text-field" type="text" autoComplete="off" value={formState.preferredRegion} onChange={(e) => updateFormField("preferredRegion", e.target.value)} />
+              </>
+            ) : null}
+
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }

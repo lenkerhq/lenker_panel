@@ -9,6 +9,7 @@ import {
   type Plan,
   type SubscriptionTemplate,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
 
 interface SubscriptionTemplatesPageProps {
@@ -17,7 +18,6 @@ interface SubscriptionTemplatesPageProps {
 }
 
 type LoadState = "idle" | "loading" | "loaded" | "failed";
-type FormMode = "create" | "edit";
 
 interface TemplateFormState {
   name: string;
@@ -60,13 +60,62 @@ function parsePositiveInteger(value: string): number | null {
   return Number.isSafeInteger(n) ? n : null;
 }
 
+interface TemplateFormFieldsProps {
+  form: TemplateFormState;
+  onChange: (field: keyof TemplateFormState, value: string | boolean) => void;
+  plans: Plan[];
+  idPrefix: string;
+}
+
+function TemplateFormFields({ form, onChange, plans, idPrefix }: TemplateFormFieldsProps) {
+  const activePlans = plans.filter((p) => p.status === "active");
+  return (
+    <>
+      <label className="field-label" htmlFor={`${idPrefix}-name`}>Name</label>
+      <input id={`${idPrefix}-name`} className="text-field" type="text" autoComplete="off" value={form.name} onChange={(e) => onChange("name", e.target.value)} />
+
+      <label className="field-label" htmlFor={`${idPrefix}-description`}>Description</label>
+      <input id={`${idPrefix}-description`} className="text-field" type="text" autoComplete="off" value={form.description} onChange={(e) => onChange("description", e.target.value)} />
+
+      <label className="field-label" htmlFor={`${idPrefix}-plan`}>Plan (optional)</label>
+      <select id={`${idPrefix}-plan`} className="select-field" value={form.planID} onChange={(e) => onChange("planID", e.target.value)}>
+        <option value="">No plan</option>
+        {activePlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+      </select>
+
+      <div className="form-grid">
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-duration-days`}>Duration days</label>
+          <input id={`${idPrefix}-duration-days`} className="text-field" type="number" min="1" inputMode="numeric" value={form.durationDays} onChange={(e) => onChange("durationDays", e.target.value)} />
+        </div>
+        <div>
+          <label className="field-label" htmlFor={`${idPrefix}-device-limit`}>Device limit</label>
+          <input id={`${idPrefix}-device-limit`} className="text-field" type="number" min="1" inputMode="numeric" value={form.deviceLimit} onChange={(e) => onChange("deviceLimit", e.target.value)} />
+        </div>
+      </div>
+
+      <label className="check-row" htmlFor={`${idPrefix}-has-traffic-limit`}>
+        <input id={`${idPrefix}-has-traffic-limit`} type="checkbox" checked={form.hasTrafficLimit} onChange={(e) => onChange("hasTrafficLimit", e.target.checked)} />
+        <span>Set traffic limit</span>
+      </label>
+
+      {form.hasTrafficLimit ? (
+        <>
+          <label className="field-label" htmlFor={`${idPrefix}-traffic-limit`}>Traffic limit bytes</label>
+          <input id={`${idPrefix}-traffic-limit`} className="text-field" type="number" min="1" inputMode="numeric" value={form.trafficLimitBytes} onChange={(e) => onChange("trafficLimitBytes", e.target.value)} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
 export function SubscriptionTemplatesPage({ session, onUnauthorized }: SubscriptionTemplatesPageProps) {
   const [templates, setTemplates] = useState<SubscriptionTemplate[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [createForm, setCreateForm] = useState<TemplateFormState>(() => emptyTemplateForm());
   const [editingTemplate, setEditingTemplate] = useState<SubscriptionTemplate | null>(null);
-  const [formState, setFormState] = useState<TemplateFormState>(() => emptyTemplateForm());
+  const [editForm, setEditForm] = useState<TemplateFormState>(() => emptyTemplateForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
@@ -111,64 +160,82 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
     return () => { isMounted = false; };
   }, [onUnauthorized, session]);
 
-  function updateFormField(fieldName: keyof TemplateFormState, value: string | boolean) {
-    setFormState((cur) => ({ ...cur, [fieldName]: value }));
+  function updateCreateField(field: keyof TemplateFormState, value: string | boolean) {
+    setCreateForm((c) => ({ ...c, [field]: value }));
   }
 
-  function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingTemplate(null);
-    setFormState(emptyTemplateForm());
-    setSuccessMessage(message ?? null);
+  function updateEditField(field: keyof TemplateFormState, value: string | boolean) {
+    setEditForm((c) => ({ ...c, [field]: value }));
   }
 
-  function startEdit(template: SubscriptionTemplate) {
-    setFormMode("edit");
+  function openEdit(template: SubscriptionTemplate) {
+    if (template.is_system) return;
     setEditingTemplate(template);
-    setFormState(templateToForm(template));
+    setEditForm(templateToForm(template));
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
-  async function submitForm(event: FormEvent<HTMLFormElement>) {
+  function closeEdit() {
+    setEditingTemplate(null);
+    setEditForm(emptyTemplateForm());
+  }
+
+  async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateTemplateForm(formState);
+    const validationError = validateTemplateForm(createForm);
     if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
 
     setIsMutating(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
-      if (formMode === "edit" && editingTemplate) {
-        await updateSubscriptionTemplate(session, editingTemplate.id, {
-          name: formState.name.trim(),
-          description: formState.description.trim() || undefined,
-          plan_id: formState.planID || undefined,
-          config: {
-            duration_days: parsePositiveInteger(formState.durationDays) ?? undefined,
-            traffic_limit_bytes: formState.hasTrafficLimit ? (parsePositiveInteger(formState.trafficLimitBytes) ?? undefined) : null,
-            device_limit: parsePositiveInteger(formState.deviceLimit) ?? undefined,
-          },
-        });
-        resetForm("Template updated.");
-      } else {
-        await createSubscriptionTemplate(session, {
-          name: formState.name.trim(),
-          description: formState.description.trim() || undefined,
-          plan_id: formState.planID || undefined,
-          config: {
-            duration_days: parsePositiveInteger(formState.durationDays) ?? 30,
-            traffic_limit_bytes: formState.hasTrafficLimit ? (parsePositiveInteger(formState.trafficLimitBytes) ?? null) : null,
-            device_limit: parsePositiveInteger(formState.deviceLimit) ?? 1,
-          },
-        });
-        resetForm("Template created.");
-      }
+      await createSubscriptionTemplate(session, {
+        name: createForm.name.trim(),
+        description: createForm.description.trim() || undefined,
+        plan_id: createForm.planID || undefined,
+        config: {
+          duration_days: parsePositiveInteger(createForm.durationDays) ?? 30,
+          traffic_limit_bytes: createForm.hasTrafficLimit ? (parsePositiveInteger(createForm.trafficLimitBytes) ?? null) : null,
+          device_limit: parsePositiveInteger(createForm.deviceLimit) ?? 1,
+        },
+      });
+      setCreateForm(emptyTemplateForm());
+      setSuccessMessage("Template created.");
       await loadData();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to save template."));
+      setErrorMessage(formatPanelError(error, "Unable to create template."));
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function submitEditForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingTemplate) return;
+    const validationError = validateTemplateForm(editForm);
+    if (validationError) { setErrorMessage(validationError); return; }
+
+    setIsMutating(true);
+    setErrorMessage(null);
+    try {
+      await updateSubscriptionTemplate(session, editingTemplate.id, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || undefined,
+        plan_id: editForm.planID || undefined,
+        config: {
+          duration_days: parsePositiveInteger(editForm.durationDays) ?? undefined,
+          traffic_limit_bytes: editForm.hasTrafficLimit ? (parsePositiveInteger(editForm.trafficLimitBytes) ?? undefined) : null,
+          device_limit: parsePositiveInteger(editForm.deviceLimit) ?? undefined,
+        },
+      });
+      closeEdit();
+      setSuccessMessage("Template updated.");
+      await loadData();
+    } catch (error) {
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to update template."));
     } finally {
       setIsMutating(false);
     }
@@ -181,7 +248,7 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
     try {
       await deleteSubscriptionTemplate(session, template.id);
       setSuccessMessage("Template deleted.");
-      if (editingTemplate?.id === template.id) resetForm("Template deleted.");
+      if (editingTemplate?.id === template.id) closeEdit();
       await loadData();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
@@ -190,8 +257,6 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
       setMutatingID(null);
     }
   }
-
-  const activePlans = plans.filter((p) => p.status === "active");
 
   return (
     <div className="page-stack" id="subscription-templates">
@@ -208,56 +273,16 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
       </section>
 
       <section className="management-grid">
-        <form className="management-panel" onSubmit={submitForm}>
+        <form className="management-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit template" : "New template"}</p>
-              <h3>{formMode === "edit" ? editingTemplate?.name : "Create template"}</h3>
-            </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>Cancel</button>
-            ) : null}
-          </div>
-
-          <label className="field-label" htmlFor="template-name">Name</label>
-          <input id="template-name" className="text-field" type="text" autoComplete="off" value={formState.name} onChange={(e) => updateFormField("name", e.target.value)} />
-
-          <label className="field-label" htmlFor="template-description">Description</label>
-          <input id="template-description" className="text-field" type="text" autoComplete="off" value={formState.description} onChange={(e) => updateFormField("description", e.target.value)} />
-
-          <label className="field-label" htmlFor="template-plan">Plan (optional)</label>
-          <select id="template-plan" className="select-field" value={formState.planID} onChange={(e) => updateFormField("planID", e.target.value)}>
-            <option value="">No plan</option>
-            {activePlans.map((plan) => (
-              <option key={plan.id} value={plan.id}>{plan.name}</option>
-            ))}
-          </select>
-
-          <div className="form-grid">
-            <div>
-              <label className="field-label" htmlFor="template-duration-days">Duration days</label>
-              <input id="template-duration-days" className="text-field" type="number" min="1" inputMode="numeric" value={formState.durationDays} onChange={(e) => updateFormField("durationDays", e.target.value)} />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="template-device-limit">Device limit</label>
-              <input id="template-device-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.deviceLimit} onChange={(e) => updateFormField("deviceLimit", e.target.value)} />
+              <p className="eyebrow">New template</p>
+              <h3>Create template</h3>
             </div>
           </div>
-
-          <label className="check-row" htmlFor="template-has-traffic-limit">
-            <input id="template-has-traffic-limit" type="checkbox" checked={formState.hasTrafficLimit} onChange={(e) => updateFormField("hasTrafficLimit", e.target.checked)} />
-            <span>Set traffic limit</span>
-          </label>
-
-          {formState.hasTrafficLimit ? (
-            <>
-              <label className="field-label" htmlFor="template-traffic-limit">Traffic limit bytes</label>
-              <input id="template-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.trafficLimitBytes} onChange={(e) => updateFormField("trafficLimitBytes", e.target.value)} />
-            </>
-          ) : null}
-
+          <TemplateFormFields form={createForm} onChange={updateCreateField} plans={plans} idPrefix="template-create" />
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create template"}
+            {isMutating ? "Saving..." : "Create template"}
           </button>
         </form>
 
@@ -291,7 +316,7 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
             </thead>
             <tbody>
               {templates.map((template) => (
-                <tr key={template.id}>
+                <tr key={template.id} className={template.is_system ? undefined : "clickable-row"} onClick={template.is_system ? undefined : () => openEdit(template)}>
                   <td>{template.name}</td>
                   <td>{template.config.duration_days} days</td>
                   <td>{template.config.device_limit}</td>
@@ -299,9 +324,9 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
                   <td>{template.plan_id ? planLabel(plans, template.plan_id) : "-"}</td>
                   <td>{template.is_system ? "yes" : "no"}</td>
                   <td className="mono-cell">{template.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(template)} disabled={isMutating || template.is_system}>Edit</button>
+                      <button className="table-button" type="button" onClick={() => openEdit(template)} disabled={isMutating || template.is_system}>Edit</button>
                       <button className="table-button danger" type="button" onClick={() => deleteTemplate(template)} disabled={template.is_system || mutatingID === template.id}>
                         {mutatingID === template.id ? "Deleting..." : "Delete"}
                       </button>
@@ -313,6 +338,24 @@ export function SubscriptionTemplatesPage({ session, onUnauthorized }: Subscript
           </table>
         </div>
       ) : null}
+
+      <Modal isOpen={editingTemplate !== null} onClose={closeEdit} title={editingTemplate ? `Edit ${editingTemplate.name}` : ""} size="medium">
+        {editingTemplate ? (
+          <form onSubmit={submitEditForm}>
+            <TemplateFormFields form={editForm} onChange={updateEditField} plans={plans} idPrefix="template-edit" />
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              <button className="table-button danger" type="button" onClick={() => deleteTemplate(editingTemplate)} disabled={mutatingID === editingTemplate.id}>
+                {mutatingID === editingTemplate.id ? "Deleting..." : "Delete"}
+              </button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }

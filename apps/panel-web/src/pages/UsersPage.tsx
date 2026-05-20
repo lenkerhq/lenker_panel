@@ -8,6 +8,7 @@ import {
   updateUser,
   type User,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
 import {
   buildCreateUserInput,
@@ -24,14 +25,13 @@ interface UsersPageProps {
 }
 
 type LoadState = "idle" | "loading" | "loaded" | "failed";
-type FormMode = "create" | "edit";
 
 export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
   const [users, setUsers] = useState<User[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [createFormState, setCreateFormState] = useState<UserFormState>(() => emptyUserForm());
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formState, setFormState] = useState<UserFormState>(() => emptyUserForm());
+  const [editFormState, setEditFormState] = useState<UserFormState>(() => emptyUserForm());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isMutating, setIsMutating] = useState(false);
@@ -42,15 +42,12 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
   const loadUsers = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
-
     try {
-      const loadedUsers = await listUsers(session);
-      setUsers(loadedUsers);
+      const loaded = await listUsers(session);
+      setUsers(loaded);
       setLoadState("loaded");
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to load users."));
       setLoadState("failed");
     }
@@ -58,88 +55,74 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
 
   useEffect(() => {
     let isMounted = true;
-
-    async function loadInitialUsers() {
+    async function load() {
       setLoadState("loading");
       setErrorMessage(null);
-
       try {
-        const loadedUsers = await listUsers(session);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setUsers(loadedUsers);
+        const loaded = await listUsers(session);
+        if (!isMounted) return;
+        setUsers(loaded);
         setLoadState("loaded");
       } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        if (handleUnauthorizedError(error, onUnauthorized)) {
-          return;
-        }
-
+        if (!isMounted) return;
+        if (handleUnauthorizedError(error, onUnauthorized)) return;
         setErrorMessage(formatPanelError(error, "Unable to load users."));
         setLoadState("failed");
       }
     }
-
-    loadInitialUsers();
-
-    return () => {
-      isMounted = false;
-    };
+    load();
+    return () => { isMounted = false; };
   }, [onUnauthorized, session]);
 
-  function updateFormField(fieldName: keyof UserFormState, value: string) {
-    setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
-  }
-
-  function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingUser(null);
-    setFormState(emptyUserForm());
-    setSuccessMessage(message ?? null);
-  }
-
-  function startEdit(user: User) {
-    setFormMode("edit");
+  function openEdit(user: User) {
     setEditingUser(user);
-    setFormState(userToForm(user));
+    setEditFormState(userToForm(user));
     setErrorMessage(null);
     setSuccessMessage(null);
   }
 
-  async function submitUserForm(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function closeEdit() {
+    setEditingUser(null);
+    setEditFormState(emptyUserForm());
+  }
 
-    const validationError = validateUserForm(formState);
-    if (validationError) {
-      setErrorMessage(validationError);
-      setSuccessMessage(null);
-      return;
-    }
+  async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const validationError = validateUserForm(createFormState);
+    if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
 
     setIsMutating(true);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
-      if (formMode === "edit" && editingUser) {
-        await updateUser(session, editingUser.id, buildUpdateUserInput(formState));
-        resetForm("User updated.");
-      } else {
-        await createUser(session, buildCreateUserInput(formState));
-        resetForm("User created.");
-      }
+      await createUser(session, buildCreateUserInput(createFormState));
+      setCreateFormState(emptyUserForm());
+      setSuccessMessage("User created.");
       await loadUsers();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to save user."));
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to create user."));
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function submitEditForm(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingUser) return;
+    const validationError = validateUserForm(editFormState);
+    if (validationError) { setErrorMessage(validationError); return; }
+
+    setIsMutating(true);
+    setErrorMessage(null);
+    try {
+      await updateUser(session, editingUser.id, buildUpdateUserInput(editFormState));
+      closeEdit();
+      setSuccessMessage("User updated.");
+      await loadUsers();
+    } catch (error) {
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to update user."));
     } finally {
       setIsMutating(false);
     }
@@ -149,7 +132,6 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
     setMutatingUserID(user.id);
     setErrorMessage(null);
     setSuccessMessage(null);
-
     try {
       if (action === "suspend") {
         await suspendUser(session, user.id);
@@ -158,11 +140,10 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
         await activateUser(session, user.id);
         setSuccessMessage("User activated.");
       }
+      if (editingUser?.id === user.id) closeEdit();
       await loadUsers();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
       setErrorMessage(formatPanelError(error, "Unable to update user status."));
     } finally {
       setMutatingUserID(null);
@@ -184,45 +165,22 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
       </section>
 
       <section className="management-grid">
-        <form className="user-form-panel" onSubmit={submitUserForm}>
+        <form className="user-form-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">{formMode === "edit" ? "Edit user" : "New user"}</p>
-              <h3>{formMode === "edit" ? editingUser?.email : "Create user"}</h3>
+              <p className="eyebrow">New user</p>
+              <h3>Create user</h3>
             </div>
-            {formMode === "edit" ? (
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>
-                Cancel
-              </button>
-            ) : null}
           </div>
 
-          <label className="field-label" htmlFor="user-email">
-            Email
-          </label>
-          <input
-            id="user-email"
-            className="text-field"
-            type="email"
-            autoComplete="off"
-            value={formState.email}
-            onChange={(event) => updateFormField("email", event.target.value)}
-          />
+          <label className="field-label" htmlFor="user-email">Email</label>
+          <input id="user-email" className="text-field" type="email" autoComplete="off" value={createFormState.email} onChange={(e) => setCreateFormState((c) => ({ ...c, email: e.target.value }))} />
 
-          <label className="field-label" htmlFor="user-display-name">
-            Display name
-          </label>
-          <input
-            id="user-display-name"
-            className="text-field"
-            type="text"
-            autoComplete="off"
-            value={formState.displayName}
-            onChange={(event) => updateFormField("displayName", event.target.value)}
-          />
+          <label className="field-label" htmlFor="user-display-name">Display name</label>
+          <input id="user-display-name" className="text-field" type="text" autoComplete="off" value={createFormState.displayName} onChange={(e) => setCreateFormState((c) => ({ ...c, displayName: e.target.value }))} />
 
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : formMode === "edit" ? "Save changes" : "Create user"}
+            {isMutating ? "Saving..." : "Create user"}
           </button>
         </form>
 
@@ -230,14 +188,10 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
           <p className="eyebrow">State</p>
           {loadState === "loading" ? <p className="state-text">Loading users...</p> : null}
           {loadState === "failed" ? <p className="error-text">{errorMessage}</p> : null}
-          {loadState === "loaded" && !errorMessage && !successMessage ? (
-            <p className="state-text">Users list is ready.</p>
-          ) : null}
+          {loadState === "loaded" && !errorMessage && !successMessage ? <p className="state-text">Users list is ready.</p> : null}
           {errorMessage && loadState !== "failed" ? <p className="error-text">{errorMessage}</p> : null}
           {successMessage ? <p className="success-text">{successMessage}</p> : null}
-          <button className="secondary-button" type="button" onClick={loadUsers} disabled={loadState === "loading"}>
-            Refresh
-          </button>
+          <button className="secondary-button" type="button" onClick={loadUsers} disabled={loadState === "loading"}>Refresh</button>
         </div>
       </section>
 
@@ -257,34 +211,22 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
             </thead>
             <tbody>
               {users.map((user) => (
-                <tr key={user.id}>
+                <tr key={user.id} className="clickable-row" onClick={() => openEdit(user)}>
                   <td>{user.email}</td>
                   <td>{user.display_name || "-"}</td>
                   <td>
                     <span className={`status-badge status-${user.status}`}>{user.status}</span>
                   </td>
                   <td className="mono-cell">{user.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(user)} disabled={isMutating}>
-                        Edit
-                      </button>
+                      <button className="table-button" type="button" onClick={() => openEdit(user)} disabled={isMutating}>Edit</button>
                       {user.status === "active" ? (
-                        <button
-                          className="table-button danger"
-                          type="button"
-                          onClick={() => updateUserStatus(user, "suspend")}
-                          disabled={mutatingUserID === user.id}
-                        >
+                        <button className="table-button danger" type="button" onClick={() => updateUserStatus(user, "suspend")} disabled={mutatingUserID === user.id}>
                           {mutatingUserID === user.id ? "Suspending..." : "Suspend"}
                         </button>
                       ) : (
-                        <button
-                          className="table-button"
-                          type="button"
-                          onClick={() => updateUserStatus(user, "activate")}
-                          disabled={mutatingUserID === user.id}
-                        >
+                        <button className="table-button" type="button" onClick={() => updateUserStatus(user, "activate")} disabled={mutatingUserID === user.id}>
                           {mutatingUserID === user.id ? "Activating..." : "Activate"}
                         </button>
                       )}
@@ -296,6 +238,41 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
           </table>
         </div>
       ) : null}
+
+      <Modal isOpen={editingUser !== null} onClose={closeEdit} title={editingUser ? `Edit ${editingUser.email}` : ""} size="small">
+        {editingUser ? (
+          <form onSubmit={submitEditForm}>
+            <label className="field-label" htmlFor="user-edit-email">Email</label>
+            <input id="user-edit-email" className="text-field" type="email" autoComplete="off" value={editFormState.email} onChange={(e) => setEditFormState((c) => ({ ...c, email: e.target.value }))} />
+
+            <label className="field-label" htmlFor="user-edit-display-name">Display name</label>
+            <input id="user-edit-display-name" className="text-field" type="text" autoComplete="off" value={editFormState.displayName} onChange={(e) => setEditFormState((c) => ({ ...c, displayName: e.target.value }))} />
+
+            <div className="check-row">
+              <span>Status:</span>
+              <span className={`status-badge status-${editingUser.status}`}>{editingUser.status}</span>
+            </div>
+
+            {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
+
+            <div className="row-actions" style={{ marginTop: 22 }}>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
+                {isMutating ? "Saving..." : "Update"}
+              </button>
+              {editingUser.status === "active" ? (
+                <button className="table-button danger" type="button" onClick={() => updateUserStatus(editingUser, "suspend")} disabled={mutatingUserID === editingUser.id}>
+                  {mutatingUserID === editingUser.id ? "Suspending..." : "Suspend"}
+                </button>
+              ) : (
+                <button className="table-button" type="button" onClick={() => updateUserStatus(editingUser, "activate")} disabled={mutatingUserID === editingUser.id}>
+                  {mutatingUserID === editingUser.id ? "Activating..." : "Activate"}
+                </button>
+              )}
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </div>
   );
 }
@@ -309,8 +286,6 @@ function handleUnauthorizedError(error: unknown, onUnauthorized: () => void): bo
 }
 
 function formatPanelError(error: unknown, fallbackMessage: string): string {
-  if (error instanceof PanelApiError) {
-    return `${error.message} (${error.code})`;
-  }
+  if (error instanceof PanelApiError) return `${error.message} (${error.code})`;
   return error instanceof Error ? error.message : fallbackMessage;
 }

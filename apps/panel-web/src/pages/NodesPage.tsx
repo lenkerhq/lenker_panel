@@ -22,6 +22,7 @@ import {
   type NodeSummary,
   type TrafficUsage,
 } from "../lib/api";
+import { Modal } from "../components/Modal";
 import {
   buildCreateNodeBootstrapTokenInput,
   canDisable,
@@ -537,7 +538,7 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
             </thead>
             <tbody>
               {nodes.map((node) => (
-                <tr key={node.id} className={node.id === selectedNodeID ? "selected-row" : undefined}>
+                <tr key={node.id} className={`clickable-row${node.id === selectedNodeID ? " selected-row" : ""}`} onClick={() => selectNode(node.id)}>
                   <td>{node.name || "-"}</td>
                   <td>{node.region || "-"}</td>
                   <td>{node.country_code || (selectedNode?.id === node.id ? selectedNode.country_code : "") || "-"}</td>
@@ -553,7 +554,7 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
                   <td>{formatNodeTimestamp(node.last_seen_at)}</td>
                   <td>{formatNodeTimestamp(node.registered_at)}</td>
                   <td className="mono-cell">{node.id}</td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
                       <button className="table-button" type="button" onClick={() => selectNode(node.id)} disabled={detailLoadState === "loading"}>
                         Details
@@ -579,15 +580,17 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
         </div>
       ) : null}
 
-      {selectedNode ? (
-        <section className="surface-card">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Node detail</p>
-              <h3>{selectedNode.name || selectedNode.id}</h3>
-            </div>
-            <div className="row-actions">
-              {renderLifecycleButtons(selectedNode, runNodeAction, mutatingNodeID, mutatingAction)}
+      <Modal isOpen={selectedNode !== null} onClose={() => { setSelectedNodeID(null); setSelectedNode(null); }} title={selectedNode ? (selectedNode.name || selectedNode.id) : ""} size="large">
+        {selectedNode ? (
+          <>
+            <section className="surface-card">
+              <div className="section-heading">
+                <div>
+                  <p className="eyebrow">Node detail</p>
+                  <h3>{selectedNode.name || selectedNode.id}</h3>
+                </div>
+                <div className="row-actions">
+                  {renderLifecycleButtons(selectedNode, runNodeAction, mutatingNodeID, mutatingAction)}
             </div>
           </div>
 
@@ -640,13 +643,9 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
             <RuntimeEventsBlock events={selectedNode.runtime_events ?? []} />
           </section>
         </section>
-      ) : null}
 
-      {selectedNode ? (
         <NodeTrafficSection session={session} nodeID={selectedNode.id} onUnauthorized={onUnauthorized} />
-      ) : null}
 
-      {selectedNode ? (
         <section className="surface-card">
           <div className="section-heading">
             <div>
@@ -767,7 +766,9 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
             </div>
           ) : null}
         </section>
-      ) : null}
+          </>
+        ) : null}
+      </Modal>
     </div>
   );
 }
