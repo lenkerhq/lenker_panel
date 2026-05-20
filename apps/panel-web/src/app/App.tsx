@@ -7,13 +7,14 @@ import { PlansPage } from "../pages/PlansPage";
 import { SubscriptionsPage } from "../pages/SubscriptionsPage";
 import { SubscriptionTemplatesPage } from "../pages/SubscriptionTemplatesPage";
 import { UsersPage } from "../pages/UsersPage";
+import { WarpConfigurationPage } from "../pages/WarpConfigurationPage";
 
 interface LoginFormState {
   email: string;
   password: string;
 }
 
-type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles";
+type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles" | "warp";
 
 interface NavigationItem {
   page: PanelPage;
@@ -33,6 +34,7 @@ const navigationItems: NavigationItem[] = [
   { page: "templates", label: "Templates" },
   { page: "nodes", label: "Nodes" },
   { page: "profiles", label: "Profiles" },
+  { page: "warp", label: "WARP" },
 ];
 
 export function App() {
@@ -184,6 +186,7 @@ export function App() {
         {activePage === "templates" ? <SubscriptionTemplatesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "nodes" ? <NodesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "profiles" ? <NodeProfilesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
+        {activePage === "warp" ? <WarpConfigurationPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
       </section>
     </main>
   );

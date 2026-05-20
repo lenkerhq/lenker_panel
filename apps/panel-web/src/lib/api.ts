@@ -686,6 +686,56 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   return payload.data;
 }
 
+// --- WARP ---
+
+export interface WarpCredentials {
+  node_id: string;
+  public_key: string;
+  address: string;
+  endpoint: string;
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface WarpCredentialsInput {
+  private_key: string;
+  public_key: string;
+  address: string;
+  endpoint?: string;
+}
+
+export interface WarpGenerateResult {
+  private_key: string;
+  public_key: string;
+}
+
+interface WarpCredentialsResponse {
+  data: WarpCredentials;
+}
+
+interface WarpGenerateResponse {
+  data: WarpGenerateResult;
+}
+
+export async function getNodeWarp(session: StoredSession, nodeID: string): Promise<WarpCredentials> {
+  const payload = await authorizedRequest<WarpCredentialsResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/warp`);
+  return payload.data;
+}
+
+export async function setNodeWarp(session: StoredSession, nodeID: string, input: WarpCredentialsInput): Promise<WarpCredentials> {
+  const payload = await authorizedRequest<WarpCredentialsResponse>(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/warp`, { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function deleteNodeWarp(session: StoredSession, nodeID: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/nodes/${encodeURIComponent(nodeID)}/warp`, { method: "DELETE" });
+}
+
+export async function generateWarpKeypair(session: StoredSession): Promise<WarpGenerateResult> {
+  const payload = await authorizedRequest<WarpGenerateResponse>(session, "/api/v1/warp/generate", { method: "POST" });
+  return payload.data;
+}
+
 // --- Node Profiles ---
 
 export interface NodeProfileRoutingRule {
