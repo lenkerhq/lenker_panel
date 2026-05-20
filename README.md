@@ -2,139 +2,42 @@
 
 English | [Русский](README.ru.md)
 
-Lenker is an early-stage open-source VPN ecosystem for providers and users.
+Lenker is an open-source VPN operations platform for providers and users.
 
-It is not a ready-to-run VPN service yet. The current repository focuses on the backend foundation for a provider control plane, managed nodes, subscriptions, and one MVP protocol path: `VLESS + Reality + XTLS Vision`.
+It provides a self-hosted control plane for managing nodes, subscriptions, users, and config deployment — with one production protocol path: **VLESS + Reality + XTLS Vision**.
 
-## What Is Lenker
+## Ecosystem
 
-Lenker is intended to become a self-hosted VPN operations stack:
+| Repository | Role |
+|---|---|
+| `lenker_panel` (this repo) | Backend API, node agent, web admin panel, migrations, deployment |
+| [`lenker_app`](https://github.com/lenkerhq/lenker_app) | Cross-platform desktop/mobile VPN client (Flutter) |
+
+## Architecture
 
 ```text
-provider panel -> node agent -> subscriptions -> client app -> future marketplace
+┌─────────────┐     ┌─────────────┐     ┌──────────────┐
+│  panel-web  │────▶│  panel-api  │────▶│  PostgreSQL  │
+└─────────────┘     └──────┬──────┘     └──────────────┘
+                           │
+                    ┌──────▼──────┐
+                    │  node-agent │──▶ Xray runtime
+                    └─────────────┘
 ```
-
-The first product milestone, `MVP v0.1`, is deliberately narrow. It is about proving that a provider can manage users, plans, subscriptions, and nodes before the project grows into billing, marketplace, multi-protocol support, or production client distribution.
 
 ## Current Status
 
-Lenker is under active foundation development.
+**Foundation complete. Runtime verified. Consumer auth deployed.**
 
-Current repository state:
+What works today:
 
-- `panel-api` foundation exists.
-- Admin auth uses bcrypt password verification.
-- Admin session middleware uses `Authorization: Bearer <session_token>`.
-- Admin CRUD slice exists for users, plans, and subscriptions.
-- Local development bootstrap can create the first admin.
-- PostgreSQL migrations exist for identity, subscriptions, and node foundation tables.
-- OpenAPI draft and lightweight validation are in place.
-- GitHub Actions runs backend and OpenAPI checks.
-- `node-agent` foundation exists.
-- `panel-api` and `node-agent` have a bootstrap token, registration, and heartbeat contract.
-- Docker local dev profile exists for PostgreSQL, migrations, `panel-api`, and `node-agent` smoke checks.
+- **panel-api**: admin auth, users, plans, subscriptions, nodes, config revisions, runtime apply/rollback, handoff/access tokens, audit logs, devices, traffic accounting, routing rules, global settings, WARP credentials, node profiles, subscription templates, consumer account registration/login
+- **node-agent**: registration, heartbeat, config apply, Xray process supervisor, state restore, runtime events
+- **panel-web**: full admin UI — login, CRUD for all entities, config revisions, runtime visibility, traffic/quota, subscription templates, node profiles, WARP config, routing rules, global settings
+- **Consumer account auth**: email/password registration and login for end-user app
+- **Deployment**: Docker Compose local dev, production deployment to VPS verified
 
-Not ready yet:
-
-- production VPN runtime
-- real Xray process control
-- signed config deployment
-- real rollback executor
-- full mTLS/certificate lifecycle
-- production client app
-
-## MVP v0.1 Scope
-
-Included in `MVP v0.1`:
-
-- provider panel backend
-- node agent
-- users, plans, and subscriptions
-- node registration and heartbeat
-- PostgreSQL-backed state
-- REST API and OpenAPI draft
-- manual renewal, API, and webhook foundation
-- Android, Windows, and macOS client app target
-- one production protocol path: `VLESS + Reality + XTLS Vision`
-
-Explicitly not included in `MVP v0.1`:
-
-- marketplace implementation
-- built-in billing or payment processing
-- provider ranking, reviews, or commission flow
-- Telegram bot as a core module
-- iOS or Linux client
-- production multi-protocol support
-- white-label builds
-- enterprise SSO
-- migration tools from other panels
-- full analytics or support ticketing
-
-## What Works Today
-
-Backend foundation:
-
-- `GET /healthz`
-- `POST /api/v1/auth/admin/login`
-- admin-protected users API
-- admin-protected plans API
-- admin-protected subscriptions API
-- `POST /api/v1/nodes/register`
-- `POST /api/v1/nodes/bootstrap-token`
-- admin-protected node list/detail and lifecycle actions
-- `POST /api/v1/nodes/{id}/heartbeat`
-
-Node-agent foundation:
-
-- `GET /healthz`
-- `GET /status`
-- env-based config loading
-- registration payload builder
-- heartbeat payload builder
-- config revision and rollback placeholder models
-
-Local tooling:
-
-- PostgreSQL migrations through `golang-migrate/migrate`
-- first-admin bootstrap CLI
-- Docker Compose local dev profile
-- OpenAPI validation
-- unit and contract tests
-- GitHub Actions CI
-
-## Repository Layout
-
-```text
-.
-├── apps/
-│   ├── client-app/
-│   └── panel-web/
-├── deploy/
-│   └── docker/
-├── docs/
-│   ├── adr/
-│   ├── openapi/
-│   ├── MVP_SPEC.md
-│   ├── api.md
-│   ├── architecture.md
-│   ├── business-model.md
-│   ├── database.md
-│   └── roadmap.md
-├── migrations/
-├── scripts/
-├── services/
-│   ├── node-agent/
-│   └── panel-api/
-├── Makefile
-├── README.md
-├── README.ru.md
-├── go.work
-└── package.json
-```
-
-## Quick Start
-
-The fastest local smoke path is Docker Compose:
+## Quick Start (Docker)
 
 ```sh
 make docker-build
@@ -143,167 +46,135 @@ make docker-bootstrap-admin
 make docker-smoke
 ```
 
-This starts PostgreSQL, applies migrations, starts `panel-api`, starts `node-agent`, creates a local admin, and checks both health endpoints.
+This starts PostgreSQL, applies migrations, starts `panel-api` + `node-agent`, creates a local admin, and verifies health endpoints.
 
-Default local admin created by `make docker-bootstrap-admin`:
+Default admin: `owner@example.com` / `change-me-now`
 
-```text
-email: owner@example.com
-password: change-me-now
-```
-
-Stop the local Docker stack:
-
+Stop:
 ```sh
 make docker-down
 ```
 
-See [deploy/docker/README.md](deploy/docker/README.md) for Docker-specific notes.
+## Manual Development
 
-## Manual Local Development
-
-Prerequisites for manual backend work:
-
-- Go 1.22+
-- Ruby, for the lightweight OpenAPI validator
-- PostgreSQL
-- `golang-migrate/migrate`
-
-Set a local database URL:
+Prerequisites: Go 1.22+, PostgreSQL, [`golang-migrate/migrate`](https://github.com/golang-migrate/migrate)
 
 ```sh
 export LENKER_DATABASE_URL='postgres://lenker:lenker@localhost:5432/lenker?sslmode=disable'
-export LENKER_DATABASE_PING=true
-```
 
-Apply migrations:
-
-```sh
 make migrate-up
-```
-
-Create the first local admin:
-
-```sh
 ADMIN_EMAIL=owner@example.com ADMIN_PASSWORD='change-me-now' make bootstrap-admin
-```
-
-Run the panel API:
-
-```sh
 make run-panel-api
-```
-
-Run the node agent foundation:
-
-```sh
 make run-node-agent
 ```
 
-See [services/panel-api/README.md](services/panel-api/README.md) for a fuller local flow with curl examples.
-
-## Checks
-
-Run all current checks:
+## Panel Web (Admin UI)
 
 ```sh
-make test
+cd apps/panel-web
+npm install
+npm run dev
 ```
 
-This runs:
+Opens at `http://localhost:5173`. Requires `panel-api` running.
 
-- `go test ./...` in `services/panel-api`
-- `go test ./...` in `services/node-agent`
-- OpenAPI validation for `docs/openapi/panel-api.v1.yaml`
-
-Focused commands:
+## Tests & Checks
 
 ```sh
-make test-panel-api
-make test-node-agent
-make openapi-lint
-make docker-smoke
+make test              # all backend tests + OpenAPI lint
+make test-panel-api    # panel-api unit/integration tests
+make test-node-agent   # node-agent tests
+make openapi-lint      # OpenAPI spec validation
+make docker-smoke      # Docker-based smoke tests
 ```
 
-GitHub Actions runs `make test` on push and pull requests.
+GitHub Actions runs `make test` on push and PRs.
 
-## Documentation
+## Repository Layout
 
-- [MVP spec](docs/MVP_SPEC.md)
-- [Architecture](docs/architecture.md)
-- [Database model](docs/database.md)
-- [REST API plan](docs/api.md)
-- [OpenAPI draft](docs/openapi/panel-api.v1.yaml)
-- [OpenAPI notes](docs/openapi/README.md)
-- [Roadmap](docs/roadmap.md)
-- [Business model boundary](docs/business-model.md)
-- [Node bootstrap smoke checklist](docs/smoke/node-bootstrap.md)
-- [Docker local dev](deploy/docker/README.md)
-- [Licensing notes](docs/licensing.md)
-- [Architecture decision records](docs/adr/README.md)
-- [panel-api README](services/panel-api/README.md)
-- [node-agent README](services/node-agent/README.md)
+```text
+.
+├── apps/
+│   ├── panel-web/          # React admin panel
+│   └── client-app/         # (legacy placeholder, see lenker_app repo)
+├── services/
+│   ├── panel-api/          # Go backend API
+│   └── node-agent/         # Go node agent + Xray supervisor
+├── migrations/             # PostgreSQL migrations (golang-migrate)
+├── deploy/docker/          # Docker Compose for local dev
+├── docs/
+│   ├── openapi/            # OpenAPI spec
+│   ├── adr/                # Architecture decision records
+│   ├── MVP_SPEC.md
+│   ├── architecture.md
+│   ├── database.md
+│   └── roadmap.md
+├── scripts/                # Helper scripts
+├── Makefile
+└── go.work
+```
 
-## Governance
+## API Highlights
 
-- [License](LICENSE)
-- [Licensing notes](docs/licensing.md)
-- [Security policy](SECURITY.md)
-- [Contributing guide](CONTRIBUTING.md)
-- [Trademark policy](TRADEMARK.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
+Admin endpoints (require `Authorization: Bearer <session_token>`):
+- Users, Plans, Subscriptions CRUD
+- Nodes: list, detail, bootstrap token, lifecycle actions
+- Config revisions: create, list, detail, report, rollback
+- Subscription templates, node profiles, routing rules, WARP, global settings
+- Audit logs, devices, traffic accounting
 
-## Business Model Boundary
-
-Lenker is planned as an open-source core with commercial services around it, not as a crippled self-host demo.
-
-The self-hosted core should remain useful for small providers. Future commercial work may include Lenker Cloud, managed nodes, paid support, enterprise governance, billing plugins, migration services, and marketplace trust services.
-
-The project must not monetize user data, DNS history, browsing history, connection logs, hidden telemetry, provider logs, or pay-to-win marketplace ranking.
-
-Marketplace and billing are not part of `MVP v0.1`.
-
-## Security And Privacy Stance
-
-Lenker should be privacy-first by default:
-
-- minimal logging by default
-- no sale of user data or traffic history
-- no hidden telemetry
-- no billing or marketplace tables in the MVP schema
-- session and node tokens are stored as hashes where implemented
-- full mTLS and certificate rotation are planned but not complete yet
-
-This repository is not production-hardened yet. Do not treat it as a complete secure VPN platform.
+Client endpoints (public or access-token-protected):
+- `POST /api/v1/accounts/register` — consumer account creation
+- `POST /api/v1/accounts/login` — consumer sign-in
+- `POST /api/v1/client/handoff/claim` — exchange invite for access token
+- `GET /api/v1/client/subscription-access` — subscription info + node configs
 
 ## Roadmap
 
-Current direction:
+| Phase | Goal | Status |
+|---|---|---|
+| Foundation | Backend, admin UI, node agent, config flow | ✅ done |
+| Runtime | Xray supervisor, apply/rollback, state restore | ✅ done |
+| Consumer Auth | Account registration/login for end-user app | ✅ done |
+| VPN Client | sing-box engine in lenker_app (Stage C2) | next |
+| Self-Host Installer | App-driven VPS bootstrap | planned |
+| Provider App Mode | Provider console inside lenker_app | planned |
+| Hardening | Backup/restore, security pass, release packaging | planned |
 
-1. Finish backend foundation for provider operations.
-2. Build node registration, heartbeat, config revision, apply, and rollback foundations.
-3. Add panel web flows for admins.
-4. Add the client app flow for Android, Windows, and macOS.
-5. Harden release packaging, deployment docs, security policy, backup, and recovery.
+Not in MVP: marketplace, billing, multi-protocol UI, iOS, enterprise SSO.
 
-Post-MVP topics such as marketplace, provider verification, billing adapters, Lenker Cloud, paid support, and enterprise features are tracked as later work.
+## Documentation
 
-## Contributing Status
+- [MVP Spec](docs/MVP_SPEC.md)
+- [Architecture](docs/architecture.md)
+- [Database](docs/database.md)
+- [API Plan](docs/api.md)
+- [OpenAPI Spec](docs/openapi/panel-api.v1.yaml)
+- [Roadmap](docs/roadmap.md)
+- [Business Model](docs/business-model.md)
+- [ADRs](docs/adr/README.md)
+- [Docker Dev](deploy/docker/README.md)
+- [panel-api README](services/panel-api/README.md)
+- [node-agent README](services/node-agent/README.md)
 
-The project is not ready for broad external contribution yet. Early issues, architecture feedback, security concerns, and focused backend review are useful.
+## Security
 
-Before opening large PRs, align with the fixed `MVP v0.1` scope and avoid adding marketplace, billing, multi-protocol runtime, or production VPN logic prematurely.
+- Minimal logging by default
+- No sale of user data or traffic history
+- No hidden telemetry
+- Session tokens stored as hashes
+- Full mTLS planned (not yet complete)
 
-## License Note
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
-Lenker is currently licensed under `AGPL-3.0-only` via the root
-[LICENSE](LICENSE).
+## Contributing
 
-This choice is intended to keep the self-hosted core open-source and discourage
-closed hosted forks of the control plane. Future SDKs or specs may receive a
-more permissive license later, but no such split exists today.
+The project is in early development. Architecture feedback, security concerns, and focused reviews are welcome. Align with MVP scope before opening large PRs.
 
-See [docs/licensing.md](docs/licensing.md) and [TRADEMARK.md](TRADEMARK.md) for
-the current project boundary.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Do not assume final licensing until a `LICENSE` file and license ADR are added.
+## License
+
+[AGPL-3.0-only](LICENSE) — keeps the self-hosted core open-source.
+
+See [docs/licensing.md](docs/licensing.md) and [TRADEMARK.md](TRADEMARK.md).
