@@ -24,9 +24,10 @@ type AdminInput struct {
 }
 
 type AdminResult struct {
-	ID      string
-	Email   string
-	Created bool
+	ID       string
+	Email    string
+	Password string
+	Created  bool
 }
 
 func NormalizeAdminInput(input AdminInput) (AdminInput, error) {
@@ -74,6 +75,7 @@ func BootstrapAdmin(ctx context.Context, db *sql.DB, input AdminInput) (AdminRes
 	`, input.Email, passwordHash).Scan(&result.ID, &result.Email)
 	if err == nil {
 		result.Created = true
+		result.Password = input.Password
 		return result, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -94,6 +96,7 @@ func BootstrapAdmin(ctx context.Context, db *sql.DB, input AdminInput) (AdminRes
 func WriteResult(out io.Writer, result AdminResult) {
 	if result.Created {
 		fmt.Fprintf(out, "created admin %s (%s)\n", result.Email, result.ID)
+		fmt.Fprintf(out, "password: %s\n", result.Password)
 		return
 	}
 	fmt.Fprintf(out, "admin %s already exists (%s); password was not changed\n", result.Email, result.ID)
