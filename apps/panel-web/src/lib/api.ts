@@ -686,6 +686,78 @@ async function nodeLifecycleRequest(session: StoredSession, nodeID: string, acti
   return payload.data;
 }
 
+// --- Node Profiles ---
+
+export interface NodeProfileRoutingRule {
+  rule_type: "geosite" | "geoip" | "domain" | "ip" | "port" | "protocol";
+  target: string;
+  action: "block" | "proxy" | "direct" | "warp";
+  outbound_tag: string | null;
+  priority: number;
+}
+
+export interface NodeProfileConfig {
+  routing_rules?: NodeProfileRoutingRule[];
+}
+
+export interface NodeProfile {
+  id: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  config: NodeProfileConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateNodeProfileInput {
+  name: string;
+  description?: string;
+  config?: NodeProfileConfig;
+}
+
+export interface UpdateNodeProfileInput {
+  name?: string;
+  description?: string;
+  config?: NodeProfileConfig;
+}
+
+interface NodeProfileListResponse {
+  data?: NodeProfile[] | null;
+}
+
+interface NodeProfileResponse {
+  data: NodeProfile;
+}
+
+interface NodeProfileApplyResponse {
+  data: { profile_id: string; node_id: string };
+}
+
+export async function listNodeProfiles(session: StoredSession): Promise<NodeProfile[]> {
+  const payload = await authorizedRequest<NodeProfileListResponse>(session, "/api/v1/node-profiles");
+  return readListData(payload, "node profiles");
+}
+
+export async function createNodeProfile(session: StoredSession, input: CreateNodeProfileInput): Promise<NodeProfile> {
+  const payload = await authorizedRequest<NodeProfileResponse>(session, "/api/v1/node-profiles", { method: "POST", body: input });
+  return payload.data;
+}
+
+export async function updateNodeProfile(session: StoredSession, id: string, input: UpdateNodeProfileInput): Promise<NodeProfile> {
+  const payload = await authorizedRequest<NodeProfileResponse>(session, `/api/v1/node-profiles/${encodeURIComponent(id)}`, { method: "PUT", body: input });
+  return payload.data;
+}
+
+export async function deleteNodeProfile(session: StoredSession, id: string): Promise<void> {
+  await authorizedRequest(session, `/api/v1/node-profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function applyNodeProfile(session: StoredSession, profileID: string, nodeID: string): Promise<{ profile_id: string; node_id: string }> {
+  const payload = await authorizedRequest<NodeProfileApplyResponse>(session, `/api/v1/node-profiles/${encodeURIComponent(profileID)}/apply/${encodeURIComponent(nodeID)}`, { method: "POST" });
+  return payload.data;
+}
+
 // --- Subscription Templates ---
 
 export interface SubscriptionTemplateConfig {

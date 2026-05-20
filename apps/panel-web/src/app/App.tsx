@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useMemo, useState } from "react";
 import { getApiBaseUrl, loginAdmin, PanelApiError } from "../lib/api";
 import { clearStoredSession, loadStoredSession, saveStoredSession, type StoredSession } from "../lib/session";
+import { NodeProfilesPage } from "../pages/NodeProfilesPage";
 import { NodesPage } from "../pages/NodesPage";
 import { PlansPage } from "../pages/PlansPage";
 import { SubscriptionsPage } from "../pages/SubscriptionsPage";
@@ -12,7 +13,7 @@ interface LoginFormState {
   password: string;
 }
 
-type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes";
+type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles";
 
 interface NavigationItem {
   page: PanelPage;
@@ -31,6 +32,7 @@ const navigationItems: NavigationItem[] = [
   { page: "subscriptions", label: "Subscriptions" },
   { page: "templates", label: "Templates" },
   { page: "nodes", label: "Nodes" },
+  { page: "profiles", label: "Profiles" },
 ];
 
 export function App() {
@@ -181,6 +183,7 @@ export function App() {
         {activePage === "subscriptions" ? <SubscriptionsPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "templates" ? <SubscriptionTemplatesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
         {activePage === "nodes" ? <NodesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
+        {activePage === "profiles" ? <NodeProfilesPage session={storedSession} onUnauthorized={handleUnauthorized} /> : null}
       </section>
     </main>
   );

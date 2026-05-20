@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  applyNodeProfile,
   createNodeConfigRevision,
   createNodeBootstrapToken,
   disableNode,
@@ -9,6 +10,7 @@ import {
   getNodeConfigRevision,
   getNodeTraffic,
   listNodeConfigRevisions,
+  listNodeProfiles,
   listNodes,
   PanelApiError,
   rollbackNodeConfigRevision,
@@ -16,6 +18,7 @@ import {
   type ConfigRevision,
   type Node,
   type NodeBootstrapToken,
+  type NodeProfile,
   type NodeSummary,
   type TrafficUsage,
 } from "../lib/api";
@@ -66,6 +69,9 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
   const [revisionErrorMessage, setRevisionErrorMessage] = useState<string | null>(null);
   const [isCreatingRevision, setIsCreatingRevision] = useState(false);
   const [rollbackRevisionID, setRollbackRevisionID] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<NodeProfile[]>([]);
+  const [applyingNodeID, setApplyingNodeID] = useState<string | null>(null);
+  const [selectedProfileID, setSelectedProfileID] = useState<string>("");
 
   const activeNodes = useMemo(() => nodes.filter((node) => node.status === "active").length, [nodes]);
   const drainingNodes = useMemo(() => nodes.filter((node) => node.drain_state === "draining").length, [nodes]);
@@ -193,12 +199,13 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
       setErrorMessage(null);
 
       try {
-        const loadedNodes = await listNodes(session);
+        const [loadedNodes, loadedProfiles] = await Promise.all([listNodes(session), listNodeProfiles(session)]);
         if (!isMounted) {
           return;
         }
 
         setNodes(loadedNodes);
+        setProfiles(loadedProfiles);
         setLoadState("loaded");
 
         const firstNodeID = loadedNodes[0]?.id ?? null;
@@ -359,6 +366,23 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
       setRevisionErrorMessage(formatPanelError(error, "Unable to create rollback revision."));
     } finally {
       setRollbackRevisionID(null);
+    }
+  }
+
+  async function applyProfileToNode(nodeID: string) {
+    if (!selectedProfileID) return;
+    setApplyingNodeID(nodeID);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      await applyNodeProfile(session, selectedProfileID, nodeID);
+      setSuccessMessage("Profile applied to node.");
+      setApplyingNodeID(null);
+      setSelectedProfileID("");
+    } catch (error) {
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, "Unable to apply profile."));
+      setApplyingNodeID(null);
     }
   }
 
@@ -535,6 +559,17 @@ export function NodesPage({ session, onUnauthorized }: NodesPageProps) {
                         Details
                       </button>
                       {renderLifecycleButtons(node, runNodeAction, mutatingNodeID, mutatingAction)}
+                      {profiles.length > 0 ? (
+                        <>
+                          <select className="select-field" value={applyingNodeID === node.id ? selectedProfileID : ""} onChange={(e) => { setApplyingNodeID(node.id); setSelectedProfileID(e.target.value); }} aria-label="Select profile">
+                            <option value="">Profile...</option>
+                            {profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                          <button className="table-button" type="button" onClick={() => applyProfileToNode(node.id)} disabled={applyingNodeID === node.id && !selectedProfileID}>
+                            Apply
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
