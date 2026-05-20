@@ -9,6 +9,7 @@ servers:
 tags:
   - name: Health
   - name: Auth
+  - name: Accounts
   - name: Users
   - name: Plans
   - name: Subscriptions
@@ -1854,6 +1855,111 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
+  /api/v1/accounts/register:
+    post:
+      tags: [Accounts]
+      summary: Register a consumer account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSessionEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Email already registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/accounts/login:
+    post:
+      tags: [Accounts]
+      summary: Login to a consumer account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSessionEnvelope"
+        "401":
+          $ref: "#/components/responses/InvalidCredentials"
+        "403":
+          description: Account suspended.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/accounts/me:
+    get:
+      tags: [Accounts]
+      summary: Get current consumer account
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Account info.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /api/v1/accounts/logout:
+    post:
+      tags: [Accounts]
+      summary: Logout current consumer session
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logged out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 components:
   securitySchemes:
     bearerAuth:
@@ -1942,6 +2048,9 @@ components:
         - storage_error
         - internal_error
         - invalid_credentials
+        - invalid_input
+        - email_taken
+        - inactive_account
         - inactive_admin
         - invalid_bootstrap_token
         - expired_bootstrap_token
@@ -1958,6 +2067,75 @@ components:
                 status:
                   type: string
                   enum: [ok]
+    StatusEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+    ConsumerAccount:
+      type: object
+      required: [id, email, status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, suspended]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ConsumerSession:
+      type: object
+      required: [id, account_id, token, expires_at, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: Plaintext session token. Only returned at login/register.
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    AccountSessionEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [account, session]
+              properties:
+                account:
+                  $ref: "#/components/schemas/ConsumerAccount"
+                session:
+                  $ref: "#/components/schemas/ConsumerSession"
+    AccountEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ConsumerAccount"
     AdminLoginRequest:
       type: object
       required: [email, password]

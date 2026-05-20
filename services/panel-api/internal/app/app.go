@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lenker/lenker/services/panel-api/internal/accounts"
 	"github.com/lenker/lenker/services/panel-api/internal/admins"
 	"github.com/lenker/lenker/services/panel-api/internal/audit"
 	"github.com/lenker/lenker/services/panel-api/internal/auth"
@@ -62,6 +63,9 @@ func Run(ctx context.Context, cfg config.Config) error {
 	templatesRepo := subscription_templates.NewPostgresRepository(store.DB())
 	templatesSvc := subscription_templates.NewService(templatesRepo, store.Subscriptions())
 
+	accountsRepo := storage.NewAccountsRepository(store.DB())
+	accountsSvc := accounts.NewService(accountsRepo)
+
 	router := httpapi.NewRouter(httpapi.RouterDeps{
 		Logger:        logger,
 		Auth:          auth.NewHandler(logger, auth.NewService(store.Admins(), auth.NewPasswordVerifier()).WithAudit(auditRecorder)),
@@ -78,6 +82,7 @@ func Run(ctx context.Context, cfg config.Config) error {
 		Warp:          warp.NewHandler(logger, warpSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Profiles:      profiles.NewHandler(logger, profilesSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
 		Templates:     subscription_templates.NewHandler(logger, templatesSvc, adminSession.RequireAdmin).WithAudit(auditRecorder),
+		Accounts:      accounts.NewHandler(logger, accountsSvc),
 	})
 
 	server := &http.Server{

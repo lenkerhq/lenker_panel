@@ -62,7 +62,11 @@ EXPECTED_OPERATIONS = {
   "/api/v1/nodes/{id}/drain" => %w[post],
   "/api/v1/nodes/{id}/enable" => %w[post],
   "/api/v1/nodes/{id}/heartbeat" => %w[post],
-  "/api/v1/nodes/{id}/undrain" => %w[post]
+  "/api/v1/nodes/{id}/undrain" => %w[post],
+  "/api/v1/accounts/register" => %w[post],
+  "/api/v1/accounts/login" => %w[post],
+  "/api/v1/accounts/me" => %w[get],
+  "/api/v1/accounts/logout" => %w[post]
 }.freeze
 
 HTTP_METHODS = %w[get put post delete options head patch trace].freeze
@@ -139,6 +143,8 @@ expect(actual_operations == EXPECTED_OPERATIONS, "documented operations do not m
 
 expect(spec.dig("paths", "/healthz", "get", "security") == [], "GET /healthz must not require bearer auth")
 expect(spec.dig("paths", "/api/v1/auth/admin/login", "post", "security") == [], "POST /api/v1/auth/admin/login must not require bearer auth")
+expect(spec.dig("paths", "/api/v1/accounts/register", "post", "security") == [], "POST /api/v1/accounts/register must not require bearer auth")
+expect(spec.dig("paths", "/api/v1/accounts/login", "post", "security") == [], "POST /api/v1/accounts/login must not require bearer auth")
 
 walk_refs(spec, spec)
 

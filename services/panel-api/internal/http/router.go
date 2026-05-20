@@ -26,6 +26,7 @@ type RouterDeps struct {
 	Warp          Handler
 	Profiles      Handler
 	Templates     Handler
+	Accounts      Handler
 }
 
 func NewRouter(deps RouterDeps) http.Handler {
@@ -48,6 +49,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		deps.Warp,
 		deps.Profiles,
 		deps.Templates,
+		deps.Accounts,
 	} {
 		if handler != nil {
 			handler.RegisterRoutes(mux)
