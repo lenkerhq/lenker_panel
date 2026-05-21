@@ -52,16 +52,14 @@ import {
   type SubscriptionFormState,
   type SubscriptionStatus,
 } from "../lib/subscriptionForm";
+import { useI18n } from "../lib/i18n";
 
-interface SubscriptionsPageProps {
-  session: StoredSession;
-  onUnauthorized: () => void;
-}
-
+interface SubscriptionsPageProps { session: StoredSession; onUnauthorized: () => void; }
 type LoadState = "idle" | "loading" | "loaded" | "failed";
 type FormMode = "create" | "edit";
 
 export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPageProps) {
+  const { t } = useI18n();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -85,342 +83,174 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
   const [tokenAction, setTokenAction] = useState<"issue" | "rotate" | "revoke" | null>(null);
   const [handoffAction, setHandoffAction] = useState<"issue" | "revoke" | null>(null);
 
-  const activeSubscriptions = useMemo(
-    () => subscriptions.filter((subscription) => subscription.status === "active").length,
-    [subscriptions],
-  );
+  const activeSubscriptions = useMemo(() => subscriptions.filter((s) => s.status === "active").length, [subscriptions]);
   const activePlans = useMemo(() => plans.filter((plan) => plan.status === "active"), [plans]);
 
   const loadPageData = useCallback(async () => {
     setLoadState("loading");
     setErrorMessage(null);
-
     try {
-      const [loadedSubscriptions, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
-        listSubscriptions(session),
-        listUsers(session),
-        listPlans(session),
-        listSubscriptionTemplates(session),
+      const [loadedSubs, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
+        listSubscriptions(session), listUsers(session), listPlans(session), listSubscriptionTemplates(session),
       ]);
-      setSubscriptions(loadedSubscriptions);
-      setUsers(loadedUsers);
-      setPlans(loadedPlans);
-      setTemplates(loadedTemplates);
+      setSubscriptions(loadedSubs); setUsers(loadedUsers); setPlans(loadedPlans); setTemplates(loadedTemplates);
       setLoadState("loaded");
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to load subscriptions."));
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, t("subs.unable_load")));
       setLoadState("failed");
     }
-  }, [onUnauthorized, session]);
+  }, [onUnauthorized, session, t]);
 
   useEffect(() => {
     let isMounted = true;
-
     async function loadInitialPageData() {
-      setLoadState("loading");
-      setErrorMessage(null);
-
+      setLoadState("loading"); setErrorMessage(null);
       try {
-        const [loadedSubscriptions, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
-          listSubscriptions(session),
-          listUsers(session),
-          listPlans(session),
-          listSubscriptionTemplates(session),
+        const [loadedSubs, loadedUsers, loadedPlans, loadedTemplates] = await Promise.all([
+          listSubscriptions(session), listUsers(session), listPlans(session), listSubscriptionTemplates(session),
         ]);
-
-        if (!isMounted) {
-          return;
-        }
-
-        setSubscriptions(loadedSubscriptions);
-        setUsers(loadedUsers);
-        setPlans(loadedPlans);
-        setTemplates(loadedTemplates);
+        if (!isMounted) return;
+        setSubscriptions(loadedSubs); setUsers(loadedUsers); setPlans(loadedPlans); setTemplates(loadedTemplates);
         setLoadState("loaded");
       } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        if (handleUnauthorizedError(error, onUnauthorized)) {
-          return;
-        }
-
-        setErrorMessage(formatPanelError(error, "Unable to load subscriptions."));
+        if (!isMounted) return;
+        if (handleUnauthorizedError(error, onUnauthorized)) return;
+        setErrorMessage(formatPanelError(error, t("subs.unable_load")));
         setLoadState("failed");
       }
     }
-
     loadInitialPageData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [onUnauthorized, session]);
+    return () => { isMounted = false; };
+  }, [onUnauthorized, session, t]);
 
   function updateFormField(fieldName: keyof SubscriptionFormState, value: string | boolean) {
-    setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
+    setFormState((c) => ({ ...c, [fieldName]: value }));
   }
-
   function selectTemplate(templateID: string) {
     setSelectedTemplateID(templateID);
-    if (templateID) {
-      const template = templates.find((t) => t.id === templateID);
-      if (template?.plan_id) {
-        setFormState((cur) => ({ ...cur, planID: template.plan_id as string }));
-      }
-    }
+    if (templateID) { const tmpl = templates.find((x) => x.id === templateID); if (tmpl?.plan_id) setFormState((c) => ({ ...c, planID: tmpl.plan_id as string })); }
   }
-
   function resetForm(message?: string) {
-    setFormMode("create");
-    setEditingSubscription(null);
-    setFormState(emptySubscriptionForm());
-    setSelectedTemplateID("");
-    setSuccessMessage(message ?? null);
+    setFormMode("create"); setEditingSubscription(null); setFormState(emptySubscriptionForm()); setSelectedTemplateID(""); setSuccessMessage(message ?? null);
   }
 
   async function loadSubscriptionAccess(subscription: Subscription) {
-    setAccessSubscriptionID(subscription.id);
-    setDetailSubscriptionID(subscription.id);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    setAccessSubscriptionID(subscription.id); setDetailSubscriptionID(subscription.id); setErrorMessage(null); setSuccessMessage(null);
     try {
       const [access, tokenStatus, handoffStatus] = await Promise.all([
-        getSubscriptionAccess(session, subscription.id),
-        getSubscriptionAccessTokenStatus(session, subscription.id),
-        getSubscriptionHandoffInviteStatus(session, subscription.id),
+        getSubscriptionAccess(session, subscription.id), getSubscriptionAccessTokenStatus(session, subscription.id), getSubscriptionHandoffInviteStatus(session, subscription.id),
       ]);
-      setSubscriptionAccess(access);
-      setAccessTokenResult(null);
-      setAccessTokenStatus(tokenStatus);
-      setHandoffInviteResult(null);
-      setHandoffInviteStatus(handoffStatus);
-      setSuccessMessage("Subscription access export loaded.");
+      setSubscriptionAccess(access); setAccessTokenResult(null); setAccessTokenStatus(tokenStatus); setHandoffInviteResult(null); setHandoffInviteStatus(handoffStatus);
+      setSuccessMessage(t("subs.access_loaded"));
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setSubscriptionAccess(null);
-      setErrorMessage(formatPanelError(error, "Unable to load subscription access."));
-    } finally {
-      setAccessSubscriptionID(null);
-    }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setSubscriptionAccess(null); setErrorMessage(formatPanelError(error, t("subs.unable_load_access")));
+    } finally { setAccessSubscriptionID(null); }
   }
 
   async function issueAccessToken() {
-    if (!subscriptionAccess) {
-      return;
-    }
-
-    setTokenAction("issue");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (!subscriptionAccess) return;
+    setTokenAction("issue"); setErrorMessage(null); setSuccessMessage(null);
     try {
       const token = await createSubscriptionAccessToken(session, subscriptionAccess.subscription_id);
-      setAccessTokenResult(token);
-      setAccessTokenStatus((currentStatus) => tokenStatusFromToken(token, currentStatus?.generation));
-      setSuccessMessage("Subscription access token issued.");
-    } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to issue subscription access token."));
-    } finally {
-      setTokenAction(null);
-    }
+      setAccessTokenResult(token); setAccessTokenStatus((s) => tokenStatusFromToken(token, s?.generation)); setSuccessMessage(t("subs.token_issued"));
+    } catch (error) { if (handleUnauthorizedError(error, onUnauthorized)) return; setErrorMessage(formatPanelError(error, t("subs.unable_issue_token"))); }
+    finally { setTokenAction(null); }
   }
 
   async function rotateAccessToken() {
-    if (!subscriptionAccess) {
-      return;
-    }
-
-    setTokenAction("rotate");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (!subscriptionAccess) return;
+    setTokenAction("rotate"); setErrorMessage(null); setSuccessMessage(null);
     try {
       const token = await rotateSubscriptionAccessToken(session, subscriptionAccess.subscription_id);
-      setAccessTokenResult(token);
-      setAccessTokenStatus((currentStatus) => tokenStatusFromToken(token, currentStatus?.generation));
-      setSuccessMessage("Subscription access token rotated.");
-    } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to rotate subscription access token."));
-    } finally {
-      setTokenAction(null);
-    }
+      setAccessTokenResult(token); setAccessTokenStatus((s) => tokenStatusFromToken(token, s?.generation)); setSuccessMessage(t("subs.token_rotated"));
+    } catch (error) { if (handleUnauthorizedError(error, onUnauthorized)) return; setErrorMessage(formatPanelError(error, t("subs.unable_rotate_token"))); }
+    finally { setTokenAction(null); }
   }
 
   async function revokeAccessToken() {
-    if (!subscriptionAccess) {
-      return;
-    }
-
-    setTokenAction("revoke");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (!subscriptionAccess) return;
+    setTokenAction("revoke"); setErrorMessage(null); setSuccessMessage(null);
     try {
-      const tokenStatus = await revokeSubscriptionAccessToken(session, subscriptionAccess.subscription_id);
-      setAccessTokenResult(null);
-      setAccessTokenStatus(tokenStatus);
-      setSuccessMessage("Subscription access token revoked.");
-    } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to revoke subscription access token."));
-    } finally {
-      setTokenAction(null);
-    }
+      const ts = await revokeSubscriptionAccessToken(session, subscriptionAccess.subscription_id);
+      setAccessTokenResult(null); setAccessTokenStatus(ts); setSuccessMessage(t("subs.token_revoked"));
+    } catch (error) { if (handleUnauthorizedError(error, onUnauthorized)) return; setErrorMessage(formatPanelError(error, t("subs.unable_revoke_token"))); }
+    finally { setTokenAction(null); }
   }
 
   async function issueHandoffInvite() {
-    if (!subscriptionAccess) {
-      return;
-    }
-
-    setHandoffAction("issue");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (!subscriptionAccess) return;
+    setHandoffAction("issue"); setErrorMessage(null); setSuccessMessage(null);
     try {
       const invite = await createSubscriptionHandoffInvite(session, subscriptionAccess.subscription_id);
-      setHandoffInviteResult(invite);
-      setHandoffInviteStatus((currentStatus) => handoffStatusFromInvite(invite, currentStatus?.generation));
-      setSuccessMessage("Client handoff invite issued.");
-    } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to issue client handoff invite."));
-    } finally {
-      setHandoffAction(null);
-    }
+      setHandoffInviteResult(invite); setHandoffInviteStatus((s) => handoffStatusFromInvite(invite, s?.generation)); setSuccessMessage(t("subs.handoff_issued"));
+    } catch (error) { if (handleUnauthorizedError(error, onUnauthorized)) return; setErrorMessage(formatPanelError(error, t("subs.unable_issue_handoff"))); }
+    finally { setHandoffAction(null); }
   }
 
   async function revokeHandoffInvite() {
-    if (!subscriptionAccess) {
-      return;
-    }
-
-    setHandoffAction("revoke");
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (!subscriptionAccess) return;
+    setHandoffAction("revoke"); setErrorMessage(null); setSuccessMessage(null);
     try {
-      const inviteStatus = await revokeSubscriptionHandoffInvite(session, subscriptionAccess.subscription_id);
-      setHandoffInviteResult(null);
-      setHandoffInviteStatus(inviteStatus);
-      setSuccessMessage("Client handoff invite revoked.");
-    } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to revoke client handoff invite."));
-    } finally {
-      setHandoffAction(null);
-    }
+      const is2 = await revokeSubscriptionHandoffInvite(session, subscriptionAccess.subscription_id);
+      setHandoffInviteResult(null); setHandoffInviteStatus(is2); setSuccessMessage(t("subs.handoff_revoked"));
+    } catch (error) { if (handleUnauthorizedError(error, onUnauthorized)) return; setErrorMessage(formatPanelError(error, t("subs.unable_revoke_handoff"))); }
+    finally { setHandoffAction(null); }
   }
 
   function startEdit(subscription: Subscription) {
-    setFormMode("edit");
-    setEditingSubscription(subscription);
-    setFormState(subscriptionToForm(subscription));
-    setErrorMessage(null);
-    setSuccessMessage(null);
+    setFormMode("edit"); setEditingSubscription(subscription); setFormState(subscriptionToForm(subscription)); setErrorMessage(null); setSuccessMessage(null);
   }
 
   async function submitSubscriptionForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const validationError =
-      formMode === "edit"
-        ? validateUpdateSubscriptionForm(formState)
-        : selectedTemplateID
-          ? (!formState.userID.trim() ? "User is required." : null)
-          : validateCreateSubscriptionForm(formState);
-    if (validationError) {
-      setErrorMessage(validationError);
-      setSuccessMessage(null);
-      return;
-    }
-
-    setIsMutating(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    const validationError = formMode === "edit" ? validateUpdateSubscriptionForm(formState) : selectedTemplateID ? (!formState.userID.trim() ? "User is required." : null) : validateCreateSubscriptionForm(formState);
+    if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
+    setIsMutating(true); setErrorMessage(null); setSuccessMessage(null);
     try {
       if (formMode === "edit" && editingSubscription) {
         await updateSubscription(session, editingSubscription.id, buildUpdateSubscriptionInput(formState));
-        resetForm("Subscription updated.");
+        resetForm(t("subs.updated"));
       } else if (selectedTemplateID) {
-        await createSubscriptionFromTemplate(session, selectedTemplateID, {
-          user_id: formState.userID.trim(),
-          preferred_region: formState.hasPreferredRegion ? formState.preferredRegion.trim() : undefined,
-        });
-        resetForm("Subscription created from template.");
+        await createSubscriptionFromTemplate(session, selectedTemplateID, { user_id: formState.userID.trim(), preferred_region: formState.hasPreferredRegion ? formState.preferredRegion.trim() : undefined });
+        resetForm(t("subs.created_from_template"));
       } else {
         await createSubscription(session, buildCreateSubscriptionInput(formState));
-        resetForm("Subscription created.");
+        resetForm(t("subs.created"));
       }
       await loadPageData();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to save subscription."));
-    } finally {
-      setIsMutating(false);
-    }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, t("subs.unable_save")));
+    } finally { setIsMutating(false); }
   }
 
   async function renewSelectedSubscription(subscription: Subscription) {
     const validationError = validateRenewSubscriptionForm(formState);
-    if (validationError) {
-      setErrorMessage(validationError);
-      setSuccessMessage(null);
-      return;
-    }
-
-    setMutatingSubscriptionID(subscription.id);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
+    if (validationError) { setErrorMessage(validationError); setSuccessMessage(null); return; }
+    setMutatingSubscriptionID(subscription.id); setErrorMessage(null); setSuccessMessage(null);
     try {
       await renewSubscription(session, subscription.id, buildRenewSubscriptionInput(formState));
-      setSuccessMessage("Subscription renewed.");
+      setSuccessMessage(t("subs.renewed"));
       await loadPageData();
     } catch (error) {
-      if (handleUnauthorizedError(error, onUnauthorized)) {
-        return;
-      }
-      setErrorMessage(formatPanelError(error, "Unable to renew subscription."));
-    } finally {
-      setMutatingSubscriptionID(null);
-    }
+      if (handleUnauthorizedError(error, onUnauthorized)) return;
+      setErrorMessage(formatPanelError(error, t("subs.unable_renew")));
+    } finally { setMutatingSubscriptionID(null); }
   }
 
   return (
     <div className="page-stack" id="subscriptions">
       <section className="page-header">
         <div>
-          <p className="eyebrow">Subscriptions</p>
-          <h2>Subscriptions</h2>
-          <p>Create, update, and renew subscriptions through the panel-api admin API.</p>
+          <p className="eyebrow">{t("subs.eyebrow")}</p>
+          <h2>{t("subs.title")}</h2>
+          <p>{t("subs.description")}</p>
         </div>
         <div className="header-actions">
-          <span className="pill">{subscriptions.length} total</span>
-          <span className="pill">{activeSubscriptions} active</span>
+          <span className="pill">{subscriptions.length} {t("common.total")}</span>
+          <span className="pill">{activeSubscriptions} {t("common.active")}</span>
         </div>
       </section>
 
@@ -428,134 +258,67 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
         <form className="management-panel" onSubmit={submitSubscriptionForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">New subscription</p>
-              <h3>Create subscription</h3>
+              <p className="eyebrow">{t("subs.new_eyebrow")}</p>
+              <h3>{t("subs.create_title")}</h3>
             </div>
           </div>
-
           {formMode === "create" ? (
             <>
-              <label className="field-label" htmlFor="subscription-template">
-                Template (optional)
-              </label>
-              <select
-                id="subscription-template"
-                className="select-field"
-                value={selectedTemplateID}
-                onChange={(event) => selectTemplate(event.target.value)}
-              >
-                <option value="">No template</option>
-                {templates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
+              <label className="field-label" htmlFor="subscription-template">{t("subs.template_label")}</label>
+              <select id="subscription-template" className="select-field" value={selectedTemplateID} onChange={(e) => selectTemplate(e.target.value)}>
+                <option value="">{t("subs.no_template")}</option>
+                {templates.map((tmpl) => (<option key={tmpl.id} value={tmpl.id}>{tmpl.name}</option>))}
               </select>
-
-              <label className="field-label" htmlFor="subscription-user">
-                User
-              </label>
-              <select
-                id="subscription-user"
-                className="select-field"
-                value={formState.userID}
-                onChange={(event) => updateFormField("userID", event.target.value)}
-              >
-                <option value="">Select user</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.email}
-                  </option>
-                ))}
+              <label className="field-label" htmlFor="subscription-user">{t("subs.user")}</label>
+              <select id="subscription-user" className="select-field" value={formState.userID} onChange={(e) => updateFormField("userID", e.target.value)}>
+                <option value="">{t("subs.select_user")}</option>
+                {users.map((user) => (<option key={user.id} value={user.id}>{user.email}</option>))}
               </select>
-
               {!selectedTemplateID ? (
                 <>
-                  <label className="field-label" htmlFor="subscription-plan">
-                    Plan
-                  </label>
-                  <select
-                    id="subscription-plan"
-                    className="select-field"
-                    value={formState.planID}
-                    onChange={(event) => updateFormField("planID", event.target.value)}
-                  >
-                    <option value="">Select plan</option>
-                    {activePlans.map((plan) => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.name}
-                      </option>
-                    ))}
+                  <label className="field-label" htmlFor="subscription-plan">{t("subs.plan")}</label>
+                  <select id="subscription-plan" className="select-field" value={formState.planID} onChange={(e) => updateFormField("planID", e.target.value)}>
+                    <option value="">{t("subs.select_plan")}</option>
+                    {activePlans.map((plan) => (<option key={plan.id} value={plan.id}>{plan.name}</option>))}
                   </select>
                 </>
               ) : null}
             </>
           ) : null}
-
           <label className="check-row" htmlFor="subscription-has-preferred-region">
-            <input
-              id="subscription-has-preferred-region"
-              type="checkbox"
-              checked={formState.hasPreferredRegion}
-              onChange={(event) => updateFormField("hasPreferredRegion", event.target.checked)}
-            />
-            <span>Set preferred region</span>
+            <input id="subscription-has-preferred-region" type="checkbox" checked={formState.hasPreferredRegion} onChange={(e) => updateFormField("hasPreferredRegion", e.target.checked)} />
+            <span>{t("subs.set_preferred_region")}</span>
           </label>
-
           {formState.hasPreferredRegion ? (
             <>
-              <label className="field-label" htmlFor="subscription-preferred-region">
-                Preferred region
-              </label>
-              <input
-                id="subscription-preferred-region"
-                className="text-field"
-                type="text"
-                autoComplete="off"
-                value={formState.preferredRegion}
-                onChange={(event) => updateFormField("preferredRegion", event.target.value)}
-              />
+              <label className="field-label" htmlFor="subscription-preferred-region">{t("subs.preferred_region")}</label>
+              <input id="subscription-preferred-region" className="text-field" type="text" autoComplete="off" value={formState.preferredRegion} onChange={(e) => updateFormField("preferredRegion", e.target.value)} />
             </>
           ) : null}
-
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : selectedTemplateID ? "Create from template" : "Create subscription"}
+            {isMutating ? t("common.saving") : selectedTemplateID ? t("subs.create_from_template") : t("subs.create_button")}
           </button>
         </form>
 
         <div className="feedback-panel">
-          <p className="eyebrow">State</p>
-          {loadState === "loading" ? <p className="state-text">Loading subscriptions...</p> : null}
+          <p className="eyebrow">{t("common.state")}</p>
+          {loadState === "loading" ? <p className="state-text">{t("subs.loading")}</p> : null}
           {loadState === "failed" ? <p className="error-text">{errorMessage}</p> : null}
-          {loadState === "loaded" && !errorMessage && !successMessage ? (
-            <p className="state-text">Subscriptions list is ready.</p>
-          ) : null}
+          {loadState === "loaded" && !errorMessage && !successMessage ? <p className="state-text">{t("subs.list_ready")}</p> : null}
           {errorMessage && loadState !== "failed" ? <p className="error-text">{errorMessage}</p> : null}
           {successMessage ? <p className="success-text">{successMessage}</p> : null}
-          <button className="secondary-button" type="button" onClick={loadPageData} disabled={loadState === "loading"}>
-            Refresh
-          </button>
+          <button className="secondary-button" type="button" onClick={loadPageData} disabled={loadState === "loading"}>{t("common.refresh")}</button>
         </div>
       </section>
 
-      {loadState === "loaded" && subscriptions.length === 0 ? (
-        <p className="state-card">No subscriptions yet. Create the first subscription above.</p>
-      ) : null}
+      {loadState === "loaded" && subscriptions.length === 0 ? <p className="state-card">{t("subs.empty")}</p> : null}
 
       {subscriptions.length > 0 ? (
         <div className="table-wrap">
           <table className="data-table subscriptions-table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Plan</th>
-                <th>Status</th>
-                <th>Expires</th>
-                <th>Traffic</th>
-                <th>Devices</th>
-                <th>Region</th>
-                <th>ID</th>
-                <th>Actions</th>
+                <th>{t("subs.th_user")}</th><th>{t("subs.th_plan")}</th><th>{t("subs.th_status")}</th><th>{t("subs.th_expires")}</th><th>{t("subs.th_traffic")}</th><th>{t("subs.th_devices")}</th><th>{t("subs.th_region")}</th><th>{t("subs.th_id")}</th><th>{t("subs.th_actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -563,9 +326,7 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
                 <tr key={subscription.id} className="clickable-row" onClick={() => startEdit(subscription)}>
                   <td>{userLabel(users, subscription.user_id)}</td>
                   <td>{planLabel(plans, subscription.plan_id)}</td>
-                  <td>
-                    <span className={`status-badge status-${subscription.status}`}>{subscription.status}</span>
-                  </td>
+                  <td><span className={`status-badge status-${subscription.status}`}>{subscription.status}</span></td>
                   <td>{formatDate(subscription.expires_at)}</td>
                   <td>{formatTraffic(subscription.traffic_used_bytes, subscription.traffic_limit_bytes)}</td>
                   <td>{subscription.device_limit}</td>
@@ -573,24 +334,12 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
                   <td className="mono-cell">{subscription.id}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="row-actions">
-                      <button className="table-button" type="button" onClick={() => startEdit(subscription)} disabled={isMutating}>
-                        Edit
+                      <button className="table-button" type="button" onClick={() => startEdit(subscription)} disabled={isMutating}>{t("common.edit")}</button>
+                      <button className="table-button" type="button" onClick={() => renewSelectedSubscription(subscription)} disabled={mutatingSubscriptionID === subscription.id}>
+                        {mutatingSubscriptionID === subscription.id ? t("subs.renewing") : `Renew ${formState.renewDays || "?"}d`}
                       </button>
-                      <button
-                        className="table-button"
-                        type="button"
-                        onClick={() => renewSelectedSubscription(subscription)}
-                        disabled={mutatingSubscriptionID === subscription.id}
-                      >
-                        {mutatingSubscriptionID === subscription.id ? "Renewing..." : `Renew ${formState.renewDays || "?"}d`}
-                      </button>
-                      <button
-                        className="table-button"
-                        type="button"
-                        onClick={() => loadSubscriptionAccess(subscription)}
-                        disabled={accessSubscriptionID === subscription.id}
-                      >
-                        {accessSubscriptionID === subscription.id ? "Loading..." : "Access"}
+                      <button className="table-button" type="button" onClick={() => loadSubscriptionAccess(subscription)} disabled={accessSubscriptionID === subscription.id}>
+                        {accessSubscriptionID === subscription.id ? t("common.loading") : t("subs.access")}
                       </button>
                     </div>
                   </td>
@@ -604,240 +353,112 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
       {subscriptionAccess ? (
         <section className="management-panel subscription-access-panel">
           <div className="section-heading">
-            <div>
-              <p className="eyebrow">Access export</p>
-              <h3>{subscriptionAccess.display_name}</h3>
-            </div>
+            <div><p className="eyebrow">{t("subs.access_eyebrow")}</p><h3>{subscriptionAccess.display_name}</h3></div>
             <span className="status-badge status-active">{subscriptionAccess.protocol}</span>
           </div>
           <dl className="node-detail-grid">
-            <div>
-              <dt>subscription</dt>
-              <dd>{subscriptionAccess.subscription_id}</dd>
-            </div>
-            <div>
-              <dt>user</dt>
-              <dd>{subscriptionAccess.user_label || subscriptionAccess.user_id}</dd>
-            </div>
-            <div>
-              <dt>plan</dt>
-              <dd>{subscriptionAccess.plan_name}</dd>
-            </div>
-            <div>
-              <dt>node</dt>
-              <dd>{subscriptionAccess.node.name || subscriptionAccess.node.id}</dd>
-            </div>
-            <div>
-              <dt>address</dt>
-              <dd>{subscriptionAccess.endpoint.address}</dd>
-            </div>
-            <div>
-              <dt>port</dt>
-              <dd>{subscriptionAccess.endpoint.port}</dd>
-            </div>
-            <div>
-              <dt>security</dt>
-              <dd>{subscriptionAccess.endpoint.security}</dd>
-            </div>
-            <div>
-              <dt>flow</dt>
-              <dd>{subscriptionAccess.client.flow}</dd>
-            </div>
-            <div>
-              <dt>client id</dt>
-              <dd>{subscriptionAccess.client.id}</dd>
-            </div>
+            <div><dt>subscription</dt><dd>{subscriptionAccess.subscription_id}</dd></div>
+            <div><dt>user</dt><dd>{subscriptionAccess.user_label || subscriptionAccess.user_id}</dd></div>
+            <div><dt>plan</dt><dd>{subscriptionAccess.plan_name}</dd></div>
+            <div><dt>node</dt><dd>{subscriptionAccess.node.name || subscriptionAccess.node.id}</dd></div>
+            <div><dt>address</dt><dd>{subscriptionAccess.endpoint.address}</dd></div>
+            <div><dt>port</dt><dd>{subscriptionAccess.endpoint.port}</dd></div>
+            <div><dt>security</dt><dd>{subscriptionAccess.endpoint.security}</dd></div>
+            <div><dt>flow</dt><dd>{subscriptionAccess.client.flow}</dd></div>
+            <div><dt>client id</dt><dd>{subscriptionAccess.client.id}</dd></div>
           </dl>
-          <label className="field-label" htmlFor="subscription-access-uri">
-            VLESS URI
-          </label>
+          <label className="field-label" htmlFor="subscription-access-uri">{t("subs.vless_uri")}</label>
           <textarea id="subscription-access-uri" className="readonly-textarea" value={subscriptionAccess.uri} readOnly rows={3} />
           <div className="section-heading compact-heading">
-            <div>
-              <p className="eyebrow">Client token</p>
-              <h4>Access token lifecycle</h4>
-            </div>
+            <div><p className="eyebrow">{t("subs.token_eyebrow")}</p><h4>{t("subs.token_title")}</h4></div>
             <div className="row-actions">
-              <button className="table-button" type="button" onClick={issueAccessToken} disabled={tokenAction !== null}>
-                {tokenAction === "issue" ? "Issuing..." : "Issue"}
-              </button>
-              <button className="table-button" type="button" onClick={rotateAccessToken} disabled={tokenAction !== null}>
-                {tokenAction === "rotate" ? "Rotating..." : "Rotate"}
-              </button>
-              <button className="table-button danger" type="button" onClick={revokeAccessToken} disabled={tokenAction !== null}>
-                {tokenAction === "revoke" ? "Revoking..." : "Revoke"}
-              </button>
+              <button className="table-button" type="button" onClick={issueAccessToken} disabled={tokenAction !== null}>{tokenAction === "issue" ? t("subs.token_issuing") : t("subs.token_issue")}</button>
+              <button className="table-button" type="button" onClick={rotateAccessToken} disabled={tokenAction !== null}>{tokenAction === "rotate" ? t("subs.token_rotating") : t("subs.token_rotate")}</button>
+              <button className="table-button danger" type="button" onClick={revokeAccessToken} disabled={tokenAction !== null}>{tokenAction === "revoke" ? t("subs.token_revoking") : t("subs.token_revoke")}</button>
             </div>
           </div>
           {accessTokenStatus ? (
             <>
               <dl className="node-detail-grid">
-                <div>
-                  <dt>status</dt>
-                  <dd>{formatAccessTokenStatus(accessTokenStatus)}</dd>
-                </div>
-                <div>
-                  <dt>generation</dt>
-                  <dd>{accessTokenStatus.generation || "-"}</dd>
-                </div>
-                <div>
-                  <dt>issued</dt>
-                  <dd>{accessTokenStatus.issued_at ? formatDate(accessTokenStatus.issued_at) : "never issued"}</dd>
-                </div>
-                <div>
-                  <dt>revoked</dt>
-                  <dd>{accessTokenStatus.revoked_at ? formatDate(accessTokenStatus.revoked_at) : "-"}</dd>
-                </div>
+                <div><dt>status</dt><dd>{formatAccessTokenStatus(accessTokenStatus)}</dd></div>
+                <div><dt>generation</dt><dd>{accessTokenStatus.generation || "-"}</dd></div>
+                <div><dt>issued</dt><dd>{accessTokenStatus.issued_at ? formatDate(accessTokenStatus.issued_at) : "never issued"}</dd></div>
+                <div><dt>revoked</dt><dd>{accessTokenStatus.revoked_at ? formatDate(accessTokenStatus.revoked_at) : "-"}</dd></div>
               </dl>
               <p className="state-text">{accessTokenStatusHint(accessTokenStatus)}</p>
             </>
-          ) : (
-            <p className="state-text">Token lifecycle status is not loaded.</p>
-          )}
+          ) : (<p className="state-text">{t("subs.token_status_not_loaded")}</p>)}
           {accessTokenResult ? (
             <>
               <dl className="node-detail-grid">
-                <div>
-                  <dt>expires</dt>
-                  <dd>{formatDate(accessTokenResult.expires_at)}</dd>
-                </div>
-                <div>
-                  <dt>created</dt>
-                  <dd>{formatDate(accessTokenResult.created_at)}</dd>
-                </div>
+                <div><dt>expires</dt><dd>{formatDate(accessTokenResult.expires_at)}</dd></div>
+                <div><dt>created</dt><dd>{formatDate(accessTokenResult.created_at)}</dd></div>
               </dl>
-              <label className="field-label" htmlFor="subscription-access-token">
-                Plaintext access token
-              </label>
-              <textarea
-                id="subscription-access-token"
-                className="readonly-textarea"
-                value={accessTokenResult.access_token}
-                readOnly
-                rows={3}
-              />
+              <label className="field-label" htmlFor="subscription-access-token">{t("subs.token_plaintext_label")}</label>
+              <textarea id="subscription-access-token" className="readonly-textarea" value={accessTokenResult.access_token} readOnly rows={3} />
             </>
-          ) : (
-            <p className="state-text">No plaintext access token is currently shown.</p>
-          )}
+          ) : (<p className="state-text">{t("subs.token_no_plaintext")}</p>)}
           <div className="section-heading compact-heading">
-            <div>
-              <p className="eyebrow">Client handoff</p>
-              <h4>Bootstrap invite</h4>
-            </div>
+            <div><p className="eyebrow">{t("subs.handoff_eyebrow")}</p><h4>{t("subs.handoff_title")}</h4></div>
             <div className="row-actions">
-              <button className="table-button" type="button" onClick={issueHandoffInvite} disabled={handoffAction !== null}>
-                {handoffAction === "issue" ? "Issuing..." : "Issue invite"}
-              </button>
-              <button className="table-button danger" type="button" onClick={revokeHandoffInvite} disabled={handoffAction !== null}>
-                {handoffAction === "revoke" ? "Revoking..." : "Revoke invite"}
-              </button>
+              <button className="table-button" type="button" onClick={issueHandoffInvite} disabled={handoffAction !== null}>{handoffAction === "issue" ? t("subs.token_issuing") : t("subs.handoff_issue")}</button>
+              <button className="table-button danger" type="button" onClick={revokeHandoffInvite} disabled={handoffAction !== null}>{handoffAction === "revoke" ? t("subs.token_revoking") : t("subs.handoff_revoke")}</button>
             </div>
           </div>
           {handoffInviteStatus ? (
             <>
               <dl className="node-detail-grid">
-                <div>
-                  <dt>status</dt>
-                  <dd>{formatHandoffInviteStatus(handoffInviteStatus)}</dd>
-                </div>
-                <div>
-                  <dt>generation</dt>
-                  <dd>{handoffInviteStatus.generation || "-"}</dd>
-                </div>
-                <div>
-                  <dt>issued</dt>
-                  <dd>{handoffInviteStatus.issued_at ? formatDate(handoffInviteStatus.issued_at) : "never issued"}</dd>
-                </div>
-                <div>
-                  <dt>expires</dt>
-                  <dd>{handoffInviteStatus.expires_at ? formatDate(handoffInviteStatus.expires_at) : "-"}</dd>
-                </div>
-                <div>
-                  <dt>claimed</dt>
-                  <dd>{handoffInviteStatus.claimed_at ? formatDate(handoffInviteStatus.claimed_at) : "-"}</dd>
-                </div>
-                <div>
-                  <dt>revoked</dt>
-                  <dd>{handoffInviteStatus.revoked_at ? formatDate(handoffInviteStatus.revoked_at) : "-"}</dd>
-                </div>
+                <div><dt>status</dt><dd>{formatHandoffInviteStatus(handoffInviteStatus)}</dd></div>
+                <div><dt>generation</dt><dd>{handoffInviteStatus.generation || "-"}</dd></div>
+                <div><dt>issued</dt><dd>{handoffInviteStatus.issued_at ? formatDate(handoffInviteStatus.issued_at) : "never issued"}</dd></div>
+                <div><dt>expires</dt><dd>{handoffInviteStatus.expires_at ? formatDate(handoffInviteStatus.expires_at) : "-"}</dd></div>
+                <div><dt>claimed</dt><dd>{handoffInviteStatus.claimed_at ? formatDate(handoffInviteStatus.claimed_at) : "-"}</dd></div>
+                <div><dt>revoked</dt><dd>{handoffInviteStatus.revoked_at ? formatDate(handoffInviteStatus.revoked_at) : "-"}</dd></div>
               </dl>
               <p className="state-text">{handoffInviteStatusHint(handoffInviteStatus)}</p>
             </>
-          ) : (
-            <p className="state-text">Client handoff invite status is not loaded.</p>
-          )}
+          ) : (<p className="state-text">{t("subs.handoff_status_not_loaded")}</p>)}
           {handoffInviteResult ? (
             <>
-              <label className="field-label" htmlFor="subscription-handoff-token">
-                Plaintext handoff invite token
-              </label>
-              <textarea
-                id="subscription-handoff-token"
-                className="readonly-textarea"
-                value={handoffInviteResult.handoff_token}
-                readOnly
-                rows={3}
-              />
+              <label className="field-label" htmlFor="subscription-handoff-token">{t("subs.handoff_plaintext_label")}</label>
+              <textarea id="subscription-handoff-token" className="readonly-textarea" value={handoffInviteResult.handoff_token} readOnly rows={3} />
             </>
-          ) : (
-            <p className="state-text">No plaintext handoff invite token is currently shown.</p>
-          )}
+          ) : (<p className="state-text">{t("subs.handoff_no_plaintext")}</p>)}
         </section>
       ) : null}
 
-      {detailSubscriptionID ? (
-        <DevicesSection session={session} subscriptionID={detailSubscriptionID} deviceLimit={subscriptions.find(s => s.id === detailSubscriptionID)?.device_limit ?? 0} onUnauthorized={onUnauthorized} />
-      ) : null}
-
-      {detailSubscriptionID ? (
-        <TrafficSection session={session} subscriptionID={detailSubscriptionID} onUnauthorized={onUnauthorized} />
-      ) : null}
+      {detailSubscriptionID ? <DevicesSection session={session} subscriptionID={detailSubscriptionID} deviceLimit={subscriptions.find(s => s.id === detailSubscriptionID)?.device_limit ?? 0} onUnauthorized={onUnauthorized} t={t} /> : null}
+      {detailSubscriptionID ? <TrafficSection session={session} subscriptionID={detailSubscriptionID} onUnauthorized={onUnauthorized} t={t} /> : null}
 
       <Modal isOpen={formMode === "edit" && editingSubscription !== null} onClose={() => resetForm()} title={editingSubscription ? `Edit subscription ${editingSubscription.id.slice(0, 8)}…` : ""} size="medium">
         {editingSubscription ? (
           <form onSubmit={submitSubscriptionForm}>
-            <label className="field-label" htmlFor="sub-edit-status">Status</label>
+            <label className="field-label" htmlFor="sub-edit-status">{t("subs.edit_status")}</label>
             <select id="sub-edit-status" className="select-field" value={formState.status} onChange={(e) => updateFormField("status", e.target.value as SubscriptionStatus)}>
-              <option value="active">active</option>
-              <option value="expired">expired</option>
-              <option value="suspended">suspended</option>
+              <option value="active">active</option><option value="expired">expired</option><option value="suspended">suspended</option>
             </select>
-
-            <label className="field-label" htmlFor="sub-edit-device-limit">Device limit</label>
+            <label className="field-label" htmlFor="sub-edit-device-limit">{t("subs.edit_device_limit")}</label>
             <input id="sub-edit-device-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.deviceLimit} onChange={(e) => updateFormField("deviceLimit", e.target.value)} />
-
             <label className="check-row" htmlFor="sub-edit-has-traffic-limit">
               <input id="sub-edit-has-traffic-limit" type="checkbox" checked={formState.hasTrafficLimit} onChange={(e) => updateFormField("hasTrafficLimit", e.target.checked)} />
-              <span>Set traffic limit</span>
+              <span>{t("subs.set_traffic_limit")}</span>
             </label>
-
             {formState.hasTrafficLimit ? (
-              <>
-                <label className="field-label" htmlFor="sub-edit-traffic-limit">Traffic limit bytes</label>
-                <input id="sub-edit-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.trafficLimitBytes} onChange={(e) => updateFormField("trafficLimitBytes", e.target.value)} />
-              </>
+              <><label className="field-label" htmlFor="sub-edit-traffic-limit">{t("subs.traffic_limit_bytes")}</label>
+              <input id="sub-edit-traffic-limit" className="text-field" type="number" min="1" inputMode="numeric" value={formState.trafficLimitBytes} onChange={(e) => updateFormField("trafficLimitBytes", e.target.value)} /></>
             ) : null}
-
             <label className="check-row" htmlFor="sub-edit-has-preferred-region">
               <input id="sub-edit-has-preferred-region" type="checkbox" checked={formState.hasPreferredRegion} onChange={(e) => updateFormField("hasPreferredRegion", e.target.checked)} />
-              <span>Set preferred region</span>
+              <span>{t("subs.set_preferred_region")}</span>
             </label>
-
             {formState.hasPreferredRegion ? (
-              <>
-                <label className="field-label" htmlFor="sub-edit-preferred-region">Preferred region</label>
-                <input id="sub-edit-preferred-region" className="text-field" type="text" autoComplete="off" value={formState.preferredRegion} onChange={(e) => updateFormField("preferredRegion", e.target.value)} />
-              </>
+              <><label className="field-label" htmlFor="sub-edit-preferred-region">{t("subs.preferred_region")}</label>
+              <input id="sub-edit-preferred-region" className="text-field" type="text" autoComplete="off" value={formState.preferredRegion} onChange={(e) => updateFormField("preferredRegion", e.target.value)} /></>
             ) : null}
-
             {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
-
             <div className="row-actions" style={{ marginTop: 22 }}>
-              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
-                {isMutating ? "Saving..." : "Update"}
-              </button>
-              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>Cancel</button>
+              <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>{isMutating ? t("common.saving") : t("common.update")}</button>
+              <button className="ghost-button" type="button" onClick={() => resetForm()} disabled={isMutating}>{t("common.cancel")}</button>
             </div>
           </form>
         ) : null}
@@ -846,208 +467,82 @@ export function SubscriptionsPage({ session, onUnauthorized }: SubscriptionsPage
   );
 }
 
-function userLabel(users: User[], userID: string): string {
-  return users.find((user) => user.id === userID)?.email ?? userID;
-}
-
-function planLabel(plans: Plan[], planID: string): string {
-  return plans.find((plan) => plan.id === planID)?.name ?? planID;
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
+function userLabel(users: User[], userID: string): string { return users.find((u) => u.id === userID)?.email ?? userID; }
+function planLabel(plans: Plan[], planID: string): string { return plans.find((p) => p.id === planID)?.name ?? planID; }
+function formatDate(value: string): string { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)); }
 function formatTraffic(usedBytes: number, limitBytes: number | null): string {
   const used = new Intl.NumberFormat(undefined).format(usedBytes);
-  if (limitBytes === null) {
-    return `${used} / unlimited`;
-  }
+  if (limitBytes === null) return `${used} / unlimited`;
   return `${used} / ${new Intl.NumberFormat(undefined).format(limitBytes)}`;
 }
-
 function formatAccessTokenStatus(status: SubscriptionAccessTokenStatus): string {
-  if (!status.issued || status.status === "never_issued") {
-    return "never issued";
-  }
+  if (!status.issued || status.status === "never_issued") return "never issued";
   return status.status;
 }
-
 function accessTokenStatusHint(status: SubscriptionAccessTokenStatus): string {
-  if (!status.issued || status.status === "never_issued") {
-    return "No client access token has been issued yet.";
-  }
-  if (status.status === "revoked") {
-    return "The latest client access token is revoked; client reads will be rejected.";
-  }
+  if (!status.issued || status.status === "never_issued") return "No client access token has been issued yet.";
+  if (status.status === "revoked") return "The latest client access token is revoked; client reads will be rejected.";
   return "The current client access token can read the redacted subscription access payload.";
 }
-
 function formatHandoffInviteStatus(status: SubscriptionHandoffInviteStatus): string {
-  if (!status.issued || status.status === "never_issued") {
-    return "never issued";
-  }
+  if (!status.issued || status.status === "never_issued") return "never issued";
   return status.status;
 }
-
 function handoffInviteStatusHint(status: SubscriptionHandoffInviteStatus): string {
-  if (!status.issued || status.status === "never_issued") {
-    return "No client handoff invite has been issued yet.";
-  }
-  if (status.status === "active") {
-    return "The current invite can be claimed once to bootstrap a client access token.";
-  }
-  if (status.status === "claimed") {
-    return "The latest invite has already been claimed and cannot be reused.";
-  }
-  if (status.status === "expired") {
-    return "The latest invite expired before it was claimed.";
-  }
+  if (!status.issued || status.status === "never_issued") return "No client handoff invite has been issued yet.";
+  if (status.status === "active") return "The current invite can be claimed once to bootstrap a client access token.";
+  if (status.status === "claimed") return "The latest invite has already been claimed and cannot be reused.";
+  if (status.status === "expired") return "The latest invite expired before it was claimed.";
   return "The latest invite is revoked; client bootstrap claims will be rejected.";
 }
-
 function tokenStatusFromToken(token: SubscriptionAccessToken, previousGeneration = 0): SubscriptionAccessTokenStatus {
-  return {
-    subscription_id: token.subscription_id,
-    status: "active",
-    issued: true,
-    issued_at: token.created_at,
-    revoked_at: null,
-    generation: Math.max(previousGeneration + 1, 1),
-  };
+  return { subscription_id: token.subscription_id, status: "active", issued: true, issued_at: token.created_at, revoked_at: null, generation: Math.max(previousGeneration + 1, 1) };
 }
-
-function handoffStatusFromInvite(
-  invite: SubscriptionHandoffInvite,
-  previousGeneration = 0,
-): SubscriptionHandoffInviteStatus {
-  return {
-    subscription_id: invite.subscription_id,
-    status: "active",
-    issued: true,
-    issued_at: invite.created_at,
-    expires_at: invite.expires_at,
-    claimed_at: null,
-    revoked_at: null,
-    generation: Math.max(previousGeneration + 1, 1),
-  };
+function handoffStatusFromInvite(invite: SubscriptionHandoffInvite, previousGeneration = 0): SubscriptionHandoffInviteStatus {
+  return { subscription_id: invite.subscription_id, status: "active", issued: true, issued_at: invite.created_at, expires_at: invite.expires_at, claimed_at: null, revoked_at: null, generation: Math.max(previousGeneration + 1, 1) };
 }
-
 function handleUnauthorizedError(error: unknown, onUnauthorized: () => void): boolean {
-  if (error instanceof PanelApiError && error.status === 401) {
-    onUnauthorized();
-    return true;
-  }
+  if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return true; }
   return false;
 }
-
 function formatPanelError(error: unknown, fallbackMessage: string): string {
-  if (error instanceof PanelApiError) {
-    return `${error.message} (${error.code})`;
-  }
+  if (error instanceof PanelApiError) return `${error.message} (${error.code})`;
   return error instanceof Error ? error.message : fallbackMessage;
 }
 
-// --- Devices section ---
-
-interface DevicesSectionProps {
-  session: StoredSession;
-  subscriptionID: string;
-  deviceLimit: number;
-  onUnauthorized: () => void;
-}
-
-function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }: DevicesSectionProps) {
+interface DevicesSectionProps { session: StoredSession; subscriptionID: string; deviceLimit: number; onUnauthorized: () => void; t: (k: any) => string; }
+function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized, t }: DevicesSectionProps) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
   const [actionID, setActionID] = useState<string | null>(null);
   const [deviceTraffic, setDeviceTraffic] = useState<Record<string, TrafficUsage>>({});
-
   const loadDevices = useCallback(async () => {
     setLoadState("loading");
     try {
       const result = await listSubscriptionDevices(session, subscriptionID);
-      setDevices(result);
-      setLoadState("loaded");
+      setDevices(result); setLoadState("loaded");
       const trafficMap: Record<string, TrafficUsage> = {};
       const results = await Promise.allSettled(result.map((d) => getDeviceTraffic(session, d.id)));
-      results.forEach((r, i) => {
-        if (r.status === "fulfilled") trafficMap[result[i].id] = r.value;
-      });
+      results.forEach((r, i) => { if (r.status === "fulfilled") trafficMap[result[i].id] = r.value; });
       setDeviceTraffic(trafficMap);
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-        return;
-      }
-      setLoadState("failed");
-    }
+    } catch (err) { if (err instanceof PanelApiError && err.status === 401) { onUnauthorized(); return; } setLoadState("failed"); }
   }, [session, subscriptionID, onUnauthorized]);
-
-  useEffect(() => {
-    loadDevices();
-  }, [loadDevices]);
-
-  const handleRevoke = async (deviceID: string) => {
-    setActionID(deviceID);
-    try {
-      await deleteDevice(session, deviceID);
-      setDevices((prev) => prev.filter((d) => d.id !== deviceID));
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-      }
-    } finally {
-      setActionID(null);
-    }
-  };
-
-  const handleDeactivate = async (deviceID: string) => {
-    setActionID(deviceID);
-    try {
-      await deactivateDevice(session, deviceID);
-      setDevices((prev) => prev.map((d) => (d.id === deviceID ? { ...d, is_active: false } : d)));
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-      }
-    } finally {
-      setActionID(null);
-    }
-  };
-
+  useEffect(() => { loadDevices(); }, [loadDevices]);
+  const handleRevoke = async (deviceID: string) => { setActionID(deviceID); try { await deleteDevice(session, deviceID); setDevices((prev) => prev.filter((d) => d.id !== deviceID)); } catch (err) { if (err instanceof PanelApiError && err.status === 401) onUnauthorized(); } finally { setActionID(null); } };
+  const handleDeactivate = async (deviceID: string) => { setActionID(deviceID); try { await deactivateDevice(session, deviceID); setDevices((prev) => prev.map((d) => (d.id === deviceID ? { ...d, is_active: false } : d))); } catch (err) { if (err instanceof PanelApiError && err.status === 401) onUnauthorized(); } finally { setActionID(null); } };
   const activeCount = devices.filter((d) => d.is_active).length;
-
   return (
     <section className="management-panel">
       <div className="section-heading compact-heading">
-        <div>
-          <p className="eyebrow">Devices</p>
-          <h4>
-            {activeCount}/{deviceLimit} devices used
-          </h4>
-        </div>
+        <div><p className="eyebrow">{t("devices.eyebrow")}</p><h4>{activeCount}/{deviceLimit} devices used</h4></div>
       </div>
-      {loadState === "loading" ? <p className="state-text">Loading devices...</p> : null}
-      {loadState === "failed" ? <p className="state-text">Failed to load devices.</p> : null}
-      {loadState === "loaded" && devices.length === 0 ? <p className="state-text">No devices registered yet.</p> : null}
+      {loadState === "loading" ? <p className="state-text">{t("devices.loading")}</p> : null}
+      {loadState === "failed" ? <p className="state-text">{t("devices.failed")}</p> : null}
+      {loadState === "loaded" && devices.length === 0 ? <p className="state-text">{t("devices.empty")}</p> : null}
       {loadState === "loaded" && devices.length > 0 ? (
         <div className="table-container">
           <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Platform</th>
-                <th>Last seen</th>
-                <th>IP</th>
-                <th>Traffic</th>
-                <th>Active</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
+            <thead><tr><th>{t("devices.th_name")}</th><th>{t("devices.th_platform")}</th><th>{t("devices.th_last_seen")}</th><th>{t("devices.th_ip")}</th><th>{t("devices.th_traffic")}</th><th>{t("devices.th_active")}</th><th>{t("devices.th_actions")}</th></tr></thead>
             <tbody>
               {devices.map((device) => (
                 <tr key={device.id}>
@@ -1057,28 +552,10 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
                   <td>{device.last_ip || "-"}</td>
                   <td>{deviceTraffic[device.id] ? `↑${formatBytes(deviceTraffic[device.id].bytes_up)} ↓${formatBytes(deviceTraffic[device.id].bytes_down)}` : "—"}</td>
                   <td>{device.is_active ? "yes" : "no"}</td>
-                  <td>
-                    <div className="row-actions">
-                      {device.is_active ? (
-                        <button
-                          className="table-button"
-                          type="button"
-                          onClick={() => handleDeactivate(device.id)}
-                          disabled={actionID === device.id}
-                        >
-                          Deactivate
-                        </button>
-                      ) : null}
-                      <button
-                        className="table-button danger"
-                        type="button"
-                        onClick={() => handleRevoke(device.id)}
-                        disabled={actionID === device.id}
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  </td>
+                  <td><div className="row-actions">
+                    {device.is_active ? <button className="table-button" type="button" onClick={() => handleDeactivate(device.id)} disabled={actionID === device.id}>{t("devices.deactivate")}</button> : null}
+                    <button className="table-button danger" type="button" onClick={() => handleRevoke(device.id)} disabled={actionID === device.id}>{t("devices.revoke")}</button>
+                  </div></td>
                 </tr>
               ))}
             </tbody>
@@ -1089,143 +566,67 @@ function DevicesSection({ session, subscriptionID, deviceLimit, onUnauthorized }
   );
 }
 
-// --- Traffic section ---
-
-interface TrafficSectionProps {
-  session: StoredSession;
-  subscriptionID: string;
-  onUnauthorized: () => void;
-}
-
-function TrafficSection({ session, subscriptionID, onUnauthorized }: TrafficSectionProps) {
+interface TrafficSectionProps { session: StoredSession; subscriptionID: string; onUnauthorized: () => void; t: (k: any) => string; }
+function TrafficSection({ session, subscriptionID, onUnauthorized, t }: TrafficSectionProps) {
   const [usage, setUsage] = useState<TrafficUsage | null>(null);
   const [quota, setQuota] = useState<TrafficQuota | null>(null);
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "failed">("idle");
   const [isMutating, setIsMutating] = useState(false);
   const [quotaLimitInput, setQuotaLimitInput] = useState("");
   const [showQuotaForm, setShowQuotaForm] = useState(false);
-
   const loadTraffic = useCallback(async () => {
     setLoadState("loading");
     try {
-      const [usageResult, quotaResult] = await Promise.all([
-        getSubscriptionTraffic(session, subscriptionID),
-        getSubscriptionQuota(session, subscriptionID).catch(() => null),
-      ]);
-      setUsage(usageResult);
-      setQuota(quotaResult);
-      setLoadState("loaded");
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-        return;
-      }
-      setLoadState("failed");
-    }
+      const [usageResult, quotaResult] = await Promise.all([getSubscriptionTraffic(session, subscriptionID), getSubscriptionQuota(session, subscriptionID).catch(() => null)]);
+      setUsage(usageResult); setQuota(quotaResult); setLoadState("loaded");
+    } catch (err) { if (err instanceof PanelApiError && err.status === 401) { onUnauthorized(); return; } setLoadState("failed"); }
   }, [session, subscriptionID, onUnauthorized]);
-
-  useEffect(() => {
-    loadTraffic();
-  }, [loadTraffic]);
-
+  useEffect(() => { loadTraffic(); }, [loadTraffic]);
   const handleSetQuota = async (e: FormEvent) => {
-    e.preventDefault();
-    setIsMutating(true);
-    try {
-      const limitBytes = quotaLimitInput.trim() === "" ? null : parseInt(quotaLimitInput, 10) * 1024 * 1024 * 1024;
-      const result = await setSubscriptionQuota(session, subscriptionID, { bytes_limit: limitBytes });
-      setQuota(result);
-      setShowQuotaForm(false);
-      setQuotaLimitInput("");
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-      }
-    } finally {
-      setIsMutating(false);
-    }
+    e.preventDefault(); setIsMutating(true);
+    try { const limitBytes = quotaLimitInput.trim() === "" ? null : parseInt(quotaLimitInput, 10) * 1024 * 1024 * 1024; const result = await setSubscriptionQuota(session, subscriptionID, { bytes_limit: limitBytes }); setQuota(result); setShowQuotaForm(false); setQuotaLimitInput(""); }
+    catch (err) { if (err instanceof PanelApiError && err.status === 401) onUnauthorized(); }
+    finally { setIsMutating(false); }
   };
-
   const handleResetQuota = async () => {
     setIsMutating(true);
-    try {
-      const result = await resetSubscriptionQuota(session, subscriptionID);
-      setQuota(result);
-    } catch (err) {
-      if (err instanceof PanelApiError && err.status === 401) {
-        onUnauthorized();
-      }
-    } finally {
-      setIsMutating(false);
-    }
+    try { const result = await resetSubscriptionQuota(session, subscriptionID); setQuota(result); }
+    catch (err) { if (err instanceof PanelApiError && err.status === 401) onUnauthorized(); }
+    finally { setIsMutating(false); }
   };
-
   return (
     <section className="management-panel">
       <div className="section-heading compact-heading">
         <div>
-          <p className="eyebrow">Traffic</p>
-          {usage ? (
-            <h4>↑ {formatBytes(usage.bytes_up)} / ↓ {formatBytes(usage.bytes_down)} / Total {formatBytes(usage.bytes_total)}</h4>
-          ) : (
-            <h4>—</h4>
-          )}
+          <p className="eyebrow">{t("traffic.eyebrow")}</p>
+          {usage ? (<h4>↑ {formatBytes(usage.bytes_up)} / ↓ {formatBytes(usage.bytes_down)} / Total {formatBytes(usage.bytes_total)}</h4>) : (<h4>—</h4>)}
         </div>
         <div className="row-actions">
-          <button className="table-button" type="button" onClick={() => setShowQuotaForm(!showQuotaForm)} disabled={isMutating}>
-            Set Quota
-          </button>
-          <button className="table-button" type="button" onClick={handleResetQuota} disabled={isMutating}>
-            Reset Usage
-          </button>
+          <button className="table-button" type="button" onClick={() => setShowQuotaForm(!showQuotaForm)} disabled={isMutating}>{t("traffic.set_quota")}</button>
+          <button className="table-button" type="button" onClick={handleResetQuota} disabled={isMutating}>{t("traffic.reset_usage")}</button>
         </div>
       </div>
-
-      {loadState === "loading" ? <p className="state-text">Loading traffic...</p> : null}
-      {loadState === "failed" ? <p className="state-text">Failed to load traffic data.</p> : null}
-
+      {loadState === "loading" ? <p className="state-text">{t("traffic.loading")}</p> : null}
+      {loadState === "failed" ? <p className="state-text">{t("traffic.failed")}</p> : null}
       {quota ? (
         <div className="table-container">
           <table>
-            <thead>
-              <tr>
-                <th>Used</th>
-                <th>Limit</th>
-                <th>Remaining</th>
-                <th>Exceeded</th>
-                <th>Reset at</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>{formatBytes(quota.bytes_used)}</td>
-                <td>{quota.bytes_limit !== null ? formatBytes(quota.bytes_limit) : "unlimited"}</td>
-                <td>{quota.bytes_remaining !== null ? formatBytes(quota.bytes_remaining) : "—"}</td>
-                <td>{quota.exceeded ? "yes" : "no"}</td>
-                <td>{quota.reset_at ? formatDate(quota.reset_at) : "—"}</td>
-              </tr>
-            </tbody>
+            <thead><tr><th>{t("traffic.th_used")}</th><th>{t("traffic.th_limit")}</th><th>{t("traffic.th_remaining")}</th><th>{t("traffic.th_exceeded")}</th><th>{t("traffic.th_reset_at")}</th></tr></thead>
+            <tbody><tr>
+              <td>{formatBytes(quota.bytes_used)}</td>
+              <td>{quota.bytes_limit !== null ? formatBytes(quota.bytes_limit) : t("traffic.unlimited")}</td>
+              <td>{quota.bytes_remaining !== null ? formatBytes(quota.bytes_remaining) : "—"}</td>
+              <td>{quota.exceeded ? "yes" : "no"}</td>
+              <td>{quota.reset_at ? formatDate(quota.reset_at) : "—"}</td>
+            </tr></tbody>
           </table>
         </div>
       ) : null}
-
       {showQuotaForm ? (
         <form onSubmit={handleSetQuota} className="inline-form">
-          <label className="field-label" htmlFor="quota-limit-gb">
-            Limit (GB, empty = unlimited)
-          </label>
-          <input
-            id="quota-limit-gb"
-            type="number"
-            min="0"
-            step="1"
-            value={quotaLimitInput}
-            onChange={(e) => setQuotaLimitInput(e.target.value)}
-            placeholder="e.g. 100"
-          />
-          <button className="table-button" type="submit" disabled={isMutating}>
-            Save
-          </button>
+          <label className="field-label" htmlFor="quota-limit-gb">{t("traffic.quota_label")}</label>
+          <input id="quota-limit-gb" type="number" min="0" step="1" value={quotaLimitInput} onChange={(e) => setQuotaLimitInput(e.target.value)} placeholder="e.g. 100" />
+          <button className="table-button" type="submit" disabled={isMutating}>{t("common.save")}</button>
         </form>
       ) : null}
     </section>

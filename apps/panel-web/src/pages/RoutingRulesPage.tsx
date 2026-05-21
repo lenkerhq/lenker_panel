@@ -18,6 +18,7 @@ import {
 } from "../lib/api";
 import { Modal } from "../components/Modal";
 import type { StoredSession } from "../lib/session";
+import { useI18n } from "../lib/i18n";
 
 interface RoutingRulesPageProps {
   session: StoredSession;
@@ -63,14 +64,15 @@ interface RuleFormFieldsProps {
   form: RuleFormState;
   onChange: (next: RuleFormState) => void;
   idPrefix: string;
+  t: (key: any) => string;
 }
 
-function RuleFormFields({ form, onChange, idPrefix }: RuleFormFieldsProps) {
+function RuleFormFields({ form, onChange, idPrefix, t }: RuleFormFieldsProps) {
   return (
     <>
       <div className="form-grid">
         <div>
-          <label className="field-label" htmlFor={`${idPrefix}-type`}>Type</label>
+          <label className="field-label" htmlFor={`${idPrefix}-type`}>{t("routing.type")}</label>
           <select id={`${idPrefix}-type`} className="select-field" value={form.ruleType} onChange={(e) => onChange({ ...form, ruleType: e.target.value as RoutingRuleType })}>
             <option value="geosite">geosite</option>
             <option value="geoip">geoip</option>
@@ -81,7 +83,7 @@ function RuleFormFields({ form, onChange, idPrefix }: RuleFormFieldsProps) {
           </select>
         </div>
         <div>
-          <label className="field-label" htmlFor={`${idPrefix}-action`}>Action</label>
+          <label className="field-label" htmlFor={`${idPrefix}-action`}>{t("routing.action")}</label>
           <select id={`${idPrefix}-action`} className="select-field" value={form.action} onChange={(e) => onChange({ ...form, action: e.target.value as RoutingRuleAction })}>
             <option value="proxy">proxy</option>
             <option value="direct">direct</option>
@@ -91,32 +93,33 @@ function RuleFormFields({ form, onChange, idPrefix }: RuleFormFieldsProps) {
         </div>
       </div>
 
-      <label className="field-label" htmlFor={`${idPrefix}-target`}>Target</label>
+      <label className="field-label" htmlFor={`${idPrefix}-target`}>{t("routing.target")}</label>
       <input id={`${idPrefix}-target`} className="text-field" type="text" autoComplete="off" value={form.target} onChange={(e) => onChange({ ...form, target: e.target.value })} />
 
       <div className="form-grid">
         <div>
-          <label className="field-label" htmlFor={`${idPrefix}-outbound`}>Outbound tag (optional)</label>
+          <label className="field-label" htmlFor={`${idPrefix}-outbound`}>{t("routing.outbound_tag")}</label>
           <input id={`${idPrefix}-outbound`} className="text-field" type="text" autoComplete="off" value={form.outboundTag} onChange={(e) => onChange({ ...form, outboundTag: e.target.value })} />
         </div>
         <div>
-          <label className="field-label" htmlFor={`${idPrefix}-priority`}>Priority</label>
+          <label className="field-label" htmlFor={`${idPrefix}-priority`}>{t("routing.priority")}</label>
           <input id={`${idPrefix}-priority`} className="text-field" type="number" min="0" value={form.priority} onChange={(e) => onChange({ ...form, priority: e.target.value })} />
         </div>
       </div>
 
       <label className="check-row" htmlFor={`${idPrefix}-enabled`}>
         <input id={`${idPrefix}-enabled`} type="checkbox" checked={form.enabled} onChange={(e) => onChange({ ...form, enabled: e.target.checked })} />
-        <span>Enabled</span>
+        <span>{t("routing.enabled")}</span>
       </label>
 
-      <label className="field-label" htmlFor={`${idPrefix}-description`}>Description (optional)</label>
+      <label className="field-label" htmlFor={`${idPrefix}-description`}>{t("routing.description_label")}</label>
       <input id={`${idPrefix}-description`} className="text-field" type="text" autoComplete="off" value={form.description} onChange={(e) => onChange({ ...form, description: e.target.value })} />
     </>
   );
 }
 
 export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPageProps) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("global");
   const [nodes, setNodes] = useState<NodeSummary[]>([]);
   const [selectedNodeID, setSelectedNodeID] = useState<string>("");
@@ -146,16 +149,16 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
       setRules(loaded);
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to load rules."));
+      setErrorMessage(formatError(error, t("routing.unable_load")));
     } finally {
       setIsLoading(false);
     }
-  }, [tab, selectedNodeID, session, onUnauthorized]);
+  }, [tab, selectedNodeID, session, onUnauthorized, t]);
 
   useEffect(() => { loadRules(); }, [loadRules]);
 
   function openEdit(rule: RoutingRule) {
-    if (tab === "node" && rule.node_id === null) return; // read-only inherited
+    if (tab === "node" && rule.node_id === null) return;
     setEditingRule(rule);
     setEditForm(ruleToForm(rule));
     setErrorMessage(null);
@@ -194,7 +197,7 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
 
   async function submitCreateForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (tab === "node" && !selectedNodeID) { setErrorMessage("Select a node first."); return; }
+    if (tab === "node" && !selectedNodeID) { setErrorMessage(t("routing.select_node_first")); return; }
     const err = validateRuleForm(createForm);
     if (err) { setErrorMessage(err); setSuccessMessage(null); return; }
 
@@ -209,11 +212,11 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
         await createNodeRoutingRule(session, selectedNodeID, input);
       }
       setCreateForm(emptyRuleForm());
-      setSuccessMessage("Rule created.");
+      setSuccessMessage(t("routing.created"));
       await loadRules();
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to create rule."));
+      setErrorMessage(formatError(error, t("routing.unable_create")));
     } finally {
       setIsMutating(false);
     }
@@ -235,11 +238,11 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
         await updateNodeRoutingRule(session, selectedNodeID, editingRule.id, input);
       }
       closeEdit();
-      setSuccessMessage("Rule updated.");
+      setSuccessMessage(t("routing.updated"));
       await loadRules();
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to update rule."));
+      setErrorMessage(formatError(error, t("routing.unable_update")));
     } finally {
       setIsMutating(false);
     }
@@ -255,12 +258,12 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
       } else {
         await deleteNodeRoutingRule(session, selectedNodeID, rule.id);
       }
-      setSuccessMessage("Rule deleted.");
+      setSuccessMessage(t("routing.deleted"));
       if (editingRule?.id === rule.id) closeEdit();
       await loadRules();
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to delete rule."));
+      setErrorMessage(formatError(error, t("routing.unable_delete")));
     } finally {
       setMutatingID(null);
     }
@@ -275,12 +278,12 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
       const entries = rules.filter((r) => r.node_id !== null).map((r, i) => ({ id: r.id, priority: (i + 1) * 10 }));
       if (entries.length > 0) {
         await reorderNodeRoutingRules(session, selectedNodeID, entries);
-        setSuccessMessage("Rules reordered.");
+        setSuccessMessage(t("routing.reordered"));
         await loadRules();
       }
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to reorder rules."));
+      setErrorMessage(formatError(error, t("routing.unable_reorder")));
     } finally {
       setIsMutating(false);
     }
@@ -298,21 +301,21 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
     <div className="page-stack" id="routing-rules">
       <section className="page-header">
         <div>
-          <p className="eyebrow">Routing</p>
-          <h2>Routing Rules</h2>
-          <p>Manage global and per-node routing rules for traffic control.</p>
+          <p className="eyebrow">{t("routing.eyebrow")}</p>
+          <h2>{t("routing.title")}</h2>
+          <p>{t("routing.description")}</p>
         </div>
         <div className="header-actions">
-          <button className={`pill ${tab === "global" ? "pill-active" : ""}`} type="button" onClick={() => switchTab("global")}>Global</button>
-          <button className={`pill ${tab === "node" ? "pill-active" : ""}`} type="button" onClick={() => switchTab("node")}>Node</button>
+          <button className={`pill ${tab === "global" ? "pill-active" : ""}`} type="button" onClick={() => switchTab("global")}>{t("routing.global")}</button>
+          <button className={`pill ${tab === "node" ? "pill-active" : ""}`} type="button" onClick={() => switchTab("node")}>{t("routing.node")}</button>
         </div>
       </section>
 
       {tab === "node" ? (
         <section>
-          <label className="field-label" htmlFor="routing-node-select">Node</label>
+          <label className="field-label" htmlFor="routing-node-select">{t("routing.node_label")}</label>
           <select id="routing-node-select" className="select-field" value={selectedNodeID} onChange={(e) => selectNode(e.target.value)}>
-            <option value="">Select node</option>
+            <option value="">{t("routing.select_node")}</option>
             {nodes.map((n) => <option key={n.id} value={n.id}>{n.name || n.id}</option>)}
           </select>
         </section>
@@ -322,48 +325,48 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
         <form className="management-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">New rule</p>
-              <h3>Create rule</h3>
+              <p className="eyebrow">{t("routing.new_eyebrow")}</p>
+              <h3>{t("routing.create_title")}</h3>
             </div>
           </div>
-          <RuleFormFields form={createForm} onChange={setCreateForm} idPrefix="rule-create" />
+          <RuleFormFields form={createForm} onChange={setCreateForm} idPrefix="rule-create" t={t} />
           <button className="primary-button" type="submit" disabled={isMutating || (tab === "node" && !selectedNodeID)}>
-            {isMutating ? "Saving..." : "Create rule"}
+            {isMutating ? t("common.saving") : t("routing.create_button")}
           </button>
         </form>
 
         <div className="feedback-panel">
-          <p className="eyebrow">State</p>
-          {isLoading ? <p className="state-text">Loading rules...</p> : null}
+          <p className="eyebrow">{t("common.state")}</p>
+          {isLoading ? <p className="state-text">{t("routing.loading")}</p> : null}
           {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
           {successMessage ? <p className="success-text">{successMessage}</p> : null}
-          {!isLoading && !errorMessage && !successMessage ? <p className="state-text">{rules.length} rules loaded.</p> : null}
+          {!isLoading && !errorMessage && !successMessage ? <p className="state-text">{rules.length} {t("routing.rules_loaded")}</p> : null}
           <div className="row-actions">
-            <button className="secondary-button" type="button" onClick={loadRules} disabled={isLoading}>Refresh</button>
+            <button className="secondary-button" type="button" onClick={loadRules} disabled={isLoading}>{t("common.refresh")}</button>
             {tab === "node" && selectedNodeID && rules.length > 0 ? (
-              <button className="table-button" type="button" onClick={handleReorder} disabled={isMutating}>Save order</button>
+              <button className="table-button" type="button" onClick={handleReorder} disabled={isMutating}>{t("routing.save_order")}</button>
             ) : null}
           </div>
         </div>
       </section>
 
-      {rules.length === 0 && !isLoading ? <p className="state-card">No rules yet.</p> : null}
+      {rules.length === 0 && !isLoading ? <p className="state-card">{t("routing.empty")}</p> : null}
 
       {rules.length > 0 ? (
         <div className="table-wrap">
           <table className="data-table management-table">
             <thead>
               <tr>
-                {tab === "node" ? <th>Order</th> : null}
-                <th>Type</th>
-                <th>Target</th>
-                <th>Action</th>
-                <th>Outbound</th>
-                <th>Priority</th>
-                <th>Enabled</th>
-                <th>Description</th>
-                <th>Scope</th>
-                <th>Actions</th>
+                {tab === "node" ? <th>{t("routing.th_order")}</th> : null}
+                <th>{t("routing.th_type")}</th>
+                <th>{t("routing.th_target")}</th>
+                <th>{t("routing.th_action")}</th>
+                <th>{t("routing.th_outbound")}</th>
+                <th>{t("routing.th_priority")}</th>
+                <th>{t("routing.th_enabled")}</th>
+                <th>{t("routing.th_description")}</th>
+                <th>{t("routing.th_scope")}</th>
+                <th>{t("routing.th_actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -386,12 +389,12 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
                     <td>{rule.priority}</td>
                     <td>{rule.enabled ? "yes" : "no"}</td>
                     <td>{rule.description || "-"}</td>
-                    <td>{rule.node_id ? "node" : "global"}</td>
+                    <td>{rule.node_id ? t("routing.scope_node") : t("routing.scope_global")}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div className="row-actions">
-                        <button className="table-button" type="button" onClick={() => openEdit(rule)} disabled={isMutating || !editable}>Edit</button>
+                        <button className="table-button" type="button" onClick={() => openEdit(rule)} disabled={isMutating || !editable}>{t("common.edit")}</button>
                         <button className="table-button danger" type="button" onClick={() => deleteRule(rule)} disabled={mutatingID === rule.id || !editable}>
-                          {mutatingID === rule.id ? "Deleting..." : "Delete"}
+                          {mutatingID === rule.id ? t("common.deleting") : t("common.delete")}
                         </button>
                       </div>
                     </td>
@@ -406,16 +409,16 @@ export function RoutingRulesPage({ session, onUnauthorized }: RoutingRulesPagePr
       <Modal isOpen={editingRule !== null} onClose={closeEdit} title={editingRule ? `Edit rule: ${editingRule.target}` : ""} size="medium">
         {editingRule ? (
           <form onSubmit={submitEditForm}>
-            <RuleFormFields form={editForm} onChange={setEditForm} idPrefix="rule-edit" />
+            <RuleFormFields form={editForm} onChange={setEditForm} idPrefix="rule-edit" t={t} />
             {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
             <div className="row-actions" style={{ marginTop: 22 }}>
               <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
-                {isMutating ? "Saving..." : "Update"}
+                {isMutating ? t("common.saving") : t("common.update")}
               </button>
               <button className="table-button danger" type="button" onClick={() => deleteRule(editingRule)} disabled={mutatingID === editingRule.id}>
-                {mutatingID === editingRule.id ? "Deleting..." : "Delete"}
+                {mutatingID === editingRule.id ? t("common.deleting") : t("common.delete")}
               </button>
-              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>{t("common.cancel")}</button>
             </div>
           </form>
         ) : null}

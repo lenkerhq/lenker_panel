@@ -18,6 +18,7 @@ import {
   validateUserForm,
   type UserFormState,
 } from "../lib/userForm";
+import { useI18n } from "../lib/i18n";
 
 interface UsersPageProps {
   session: StoredSession;
@@ -27,6 +28,7 @@ interface UsersPageProps {
 type LoadState = "idle" | "loading" | "loaded" | "failed";
 
 export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
+  const { t } = useI18n();
   const [users, setUsers] = useState<User[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [createFormState, setCreateFormState] = useState<UserFormState>(() => emptyUserForm());
@@ -48,10 +50,10 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
       setLoadState("loaded");
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to load users."));
+      setErrorMessage(formatPanelError(error, t("users.unable_load")));
       setLoadState("failed");
     }
-  }, [onUnauthorized, session]);
+  }, [onUnauthorized, session, t]);
 
   useEffect(() => {
     let isMounted = true;
@@ -66,13 +68,13 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
       } catch (error) {
         if (!isMounted) return;
         if (handleUnauthorizedError(error, onUnauthorized)) return;
-        setErrorMessage(formatPanelError(error, "Unable to load users."));
+        setErrorMessage(formatPanelError(error, t("users.unable_load")));
         setLoadState("failed");
       }
     }
     load();
     return () => { isMounted = false; };
-  }, [onUnauthorized, session]);
+  }, [onUnauthorized, session, t]);
 
   function openEdit(user: User) {
     setEditingUser(user);
@@ -97,11 +99,11 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
     try {
       await createUser(session, buildCreateUserInput(createFormState));
       setCreateFormState(emptyUserForm());
-      setSuccessMessage("User created.");
+      setSuccessMessage(t("users.created"));
       await loadUsers();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to create user."));
+      setErrorMessage(formatPanelError(error, t("users.unable_create")));
     } finally {
       setIsMutating(false);
     }
@@ -118,11 +120,11 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
     try {
       await updateUser(session, editingUser.id, buildUpdateUserInput(editFormState));
       closeEdit();
-      setSuccessMessage("User updated.");
+      setSuccessMessage(t("users.updated"));
       await loadUsers();
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to update user."));
+      setErrorMessage(formatPanelError(error, t("users.unable_update")));
     } finally {
       setIsMutating(false);
     }
@@ -135,10 +137,10 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
     try {
       if (action === "suspend") {
         await suspendUser(session, user.id);
-        setSuccessMessage("User suspended.");
+        setSuccessMessage(t("users.suspended"));
       } else {
         await activateUser(session, user.id);
-        setSuccessMessage("User activated.");
+        setSuccessMessage(t("users.activated"));
       }
       const loaded = await listUsers(session);
       setUsers(loaded);
@@ -148,7 +150,7 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
       }
     } catch (error) {
       if (handleUnauthorizedError(error, onUnauthorized)) return;
-      setErrorMessage(formatPanelError(error, "Unable to update user status."));
+      setErrorMessage(formatPanelError(error, t("users.unable_status")));
     } finally {
       setMutatingUserID(null);
     }
@@ -158,13 +160,13 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
     <div className="page-stack" id="users">
       <section className="page-header">
         <div>
-          <p className="eyebrow">Users</p>
-          <h2>Users</h2>
-          <p>Create, edit, suspend, and activate provider users through the panel-api admin API.</p>
+          <p className="eyebrow">{t("users.eyebrow")}</p>
+          <h2>{t("users.title")}</h2>
+          <p>{t("users.description")}</p>
         </div>
         <div className="header-actions">
-          <span className="pill">{users.length} total</span>
-          <span className="pill">{activeUsers} active</span>
+          <span className="pill">{users.length} {t("common.total")}</span>
+          <span className="pill">{activeUsers} {t("common.active")}</span>
         </div>
       </section>
 
@@ -172,45 +174,45 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
         <form className="user-form-panel" onSubmit={submitCreateForm}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">New user</p>
-              <h3>Create user</h3>
+              <p className="eyebrow">{t("users.new_eyebrow")}</p>
+              <h3>{t("users.create_title")}</h3>
             </div>
           </div>
 
-          <label className="field-label" htmlFor="user-email">Email</label>
+          <label className="field-label" htmlFor="user-email">{t("users.email")}</label>
           <input id="user-email" className="text-field" type="email" autoComplete="off" value={createFormState.email} onChange={(e) => setCreateFormState((c) => ({ ...c, email: e.target.value }))} />
 
-          <label className="field-label" htmlFor="user-display-name">Display name</label>
+          <label className="field-label" htmlFor="user-display-name">{t("users.display_name")}</label>
           <input id="user-display-name" className="text-field" type="text" autoComplete="off" value={createFormState.displayName} onChange={(e) => setCreateFormState((c) => ({ ...c, displayName: e.target.value }))} />
 
           <button className="primary-button" type="submit" disabled={isMutating}>
-            {isMutating ? "Saving..." : "Create user"}
+            {isMutating ? t("common.saving") : t("users.create_button")}
           </button>
         </form>
 
         <div className="users-feedback-panel">
-          <p className="eyebrow">State</p>
-          {loadState === "loading" ? <p className="state-text">Loading users...</p> : null}
+          <p className="eyebrow">{t("common.state")}</p>
+          {loadState === "loading" ? <p className="state-text">{t("users.loading")}</p> : null}
           {loadState === "failed" ? <p className="error-text">{errorMessage}</p> : null}
-          {loadState === "loaded" && !errorMessage && !successMessage ? <p className="state-text">Users list is ready.</p> : null}
+          {loadState === "loaded" && !errorMessage && !successMessage ? <p className="state-text">{t("users.list_ready")}</p> : null}
           {errorMessage && loadState !== "failed" ? <p className="error-text">{errorMessage}</p> : null}
           {successMessage ? <p className="success-text">{successMessage}</p> : null}
-          <button className="secondary-button" type="button" onClick={loadUsers} disabled={loadState === "loading"}>Refresh</button>
+          <button className="secondary-button" type="button" onClick={loadUsers} disabled={loadState === "loading"}>{t("common.refresh")}</button>
         </div>
       </section>
 
-      {loadState === "loaded" && users.length === 0 ? <p className="state-card">No users yet. Create the first user above.</p> : null}
+      {loadState === "loaded" && users.length === 0 ? <p className="state-card">{t("users.empty")}</p> : null}
 
       {users.length > 0 ? (
         <div className="table-wrap">
           <table className="data-table users-table">
             <thead>
               <tr>
-                <th>Email</th>
-                <th>Display name</th>
-                <th>Status</th>
-                <th>ID</th>
-                <th>Actions</th>
+                <th>{t("users.th_email")}</th>
+                <th>{t("users.th_display_name")}</th>
+                <th>{t("users.th_status")}</th>
+                <th>{t("users.th_id")}</th>
+                <th>{t("users.th_actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -226,11 +228,11 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
                     <div className="row-actions">
                       {user.status === "active" ? (
                         <button className="table-button danger" type="button" onClick={() => updateUserStatus(user, "suspend")} disabled={mutatingUserID === user.id}>
-                          {mutatingUserID === user.id ? "Suspending..." : "Suspend"}
+                          {mutatingUserID === user.id ? t("users.suspending") : t("users.suspend")}
                         </button>
                       ) : (
                         <button className="table-button" type="button" onClick={() => updateUserStatus(user, "activate")} disabled={mutatingUserID === user.id}>
-                          {mutatingUserID === user.id ? "Activating..." : "Activate"}
+                          {mutatingUserID === user.id ? t("users.activating") : t("users.activate")}
                         </button>
                       )}
                     </div>
@@ -245,14 +247,14 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
       <Modal isOpen={editingUser !== null} onClose={closeEdit} title={editingUser ? `Edit ${editingUser.email}` : ""} size="small">
         {editingUser ? (
           <form onSubmit={submitEditForm}>
-            <label className="field-label" htmlFor="user-edit-email">Email</label>
+            <label className="field-label" htmlFor="user-edit-email">{t("users.email")}</label>
             <input id="user-edit-email" className="text-field" type="email" autoComplete="off" value={editFormState.email} onChange={(e) => setEditFormState((c) => ({ ...c, email: e.target.value }))} />
 
-            <label className="field-label" htmlFor="user-edit-display-name">Display name</label>
+            <label className="field-label" htmlFor="user-edit-display-name">{t("users.display_name")}</label>
             <input id="user-edit-display-name" className="text-field" type="text" autoComplete="off" value={editFormState.displayName} onChange={(e) => setEditFormState((c) => ({ ...c, displayName: e.target.value }))} />
 
             <div className="check-row">
-              <span>Status:</span>
+              <span>{t("users.status")}:</span>
               <span className={`status-badge status-${editingUser.status}`}>{editingUser.status}</span>
             </div>
 
@@ -260,18 +262,18 @@ export function UsersPage({ session, onUnauthorized }: UsersPageProps) {
 
             <div className="row-actions" style={{ marginTop: 22 }}>
               <button className="primary-button" type="submit" disabled={isMutating} style={{ width: "auto", marginTop: 0 }}>
-                {isMutating ? "Saving..." : "Update"}
+                {isMutating ? t("common.saving") : t("common.update")}
               </button>
               {editingUser.status === "active" ? (
                 <button className="table-button danger" type="button" onClick={() => updateUserStatus(editingUser, "suspend")} disabled={mutatingUserID === editingUser.id}>
-                  {mutatingUserID === editingUser.id ? "Suspending..." : "Suspend"}
+                  {mutatingUserID === editingUser.id ? t("users.suspending") : t("users.suspend")}
                 </button>
               ) : (
                 <button className="table-button" type="button" onClick={() => updateUserStatus(editingUser, "activate")} disabled={mutatingUserID === editingUser.id}>
-                  {mutatingUserID === editingUser.id ? "Activating..." : "Activate"}
+                  {mutatingUserID === editingUser.id ? t("users.activating") : t("users.activate")}
                 </button>
               )}
-              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>Cancel</button>
+              <button className="ghost-button" type="button" onClick={closeEdit} disabled={isMutating}>{t("common.cancel")}</button>
             </div>
           </form>
         ) : null}

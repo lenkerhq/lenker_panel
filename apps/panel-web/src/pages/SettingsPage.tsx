@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { listSettings, PanelApiError, updateSetting, type GlobalSetting } from "../lib/api";
 import type { StoredSession } from "../lib/session";
+import { useI18n } from "../lib/i18n";
 
 interface SettingsPageProps {
   session: StoredSession;
@@ -30,6 +31,7 @@ function settingsToForm(settings: GlobalSetting[]): SettingsFormState {
 }
 
 export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<GlobalSetting[]>([]);
   const [formState, setFormState] = useState<SettingsFormState>(() => settingsToForm([]));
   const [isLoading, setIsLoading] = useState(false);
@@ -46,11 +48,11 @@ export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
       setFormState(settingsToForm(loaded));
     } catch (error) {
       if (error instanceof PanelApiError && error.status === 401) { onUnauthorized(); return; }
-      setErrorMessage(formatError(error, "Unable to load settings."));
+      setErrorMessage(formatError(error, t("settings.unable_load")));
     } finally {
       setIsLoading(false);
     }
-  }, [session, onUnauthorized]);
+  }, [session, onUnauthorized, t]);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
@@ -78,10 +80,10 @@ export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
   function saveDnsServers() {
     try {
       const parsed = JSON.parse(formState.default_dns_servers);
-      if (!Array.isArray(parsed)) { setErrorMessage("DNS servers must be a JSON array."); return; }
+      if (!Array.isArray(parsed)) { setErrorMessage(t("settings.dns_array_error")); return; }
       saveSetting("default_dns_servers", parsed);
     } catch {
-      setErrorMessage("Invalid JSON for DNS servers.");
+      setErrorMessage(t("settings.dns_json_error"));
     }
   }
 
@@ -91,18 +93,18 @@ export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
     <div className="page-stack" id="settings">
       <section className="page-header">
         <div>
-          <p className="eyebrow">Configuration</p>
-          <h2>Global Settings</h2>
-          <p>Manage global configuration settings for the panel and nodes.</p>
+          <p className="eyebrow">{t("settings.eyebrow")}</p>
+          <h2>{t("settings.title")}</h2>
+          <p>{t("settings.description")}</p>
         </div>
       </section>
 
-      {isLoading ? <p className="state-text">Loading settings...</p> : null}
+      {isLoading ? <p className="state-text">{t("settings.loading")}</p> : null}
       {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
       {successMessage ? <p className="success-text">{successMessage}</p> : null}
 
       <section className="management-panel">
-        <SettingRow label="Default routing preset" description={descriptionFor("default_routing_preset")} saving={savingKey === "default_routing_preset"} onSave={saveRoutingPreset}>
+        <SettingRow label={t("settings.routing_preset")} description={descriptionFor("default_routing_preset")} saving={savingKey === "default_routing_preset"} onSave={saveRoutingPreset} t={t}>
           <select className="select-field" value={formState.default_routing_preset} onChange={(e) => setFormState((c) => ({ ...c, default_routing_preset: e.target.value }))}>
             <option value="standard">standard</option>
             <option value="strict">strict</option>
@@ -110,25 +112,25 @@ export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
           </select>
         </SettingRow>
 
-        <SettingRow label="Enable WARP outbound" description={descriptionFor("enable_warp_outbound")} saving={savingKey === "enable_warp_outbound"} onSave={saveWarpOutbound}>
+        <SettingRow label={t("settings.warp_outbound")} description={descriptionFor("enable_warp_outbound")} saving={savingKey === "enable_warp_outbound"} onSave={saveWarpOutbound} t={t}>
           <label className="check-row" htmlFor="setting-warp">
             <input id="setting-warp" type="checkbox" checked={formState.enable_warp_outbound} onChange={(e) => setFormState((c) => ({ ...c, enable_warp_outbound: e.target.checked }))} />
-            <span>{formState.enable_warp_outbound ? "Enabled" : "Disabled"}</span>
+            <span>{formState.enable_warp_outbound ? t("common.enabled") : t("common.disabled")}</span>
           </label>
         </SettingRow>
 
-        <SettingRow label="Default sniffing" description={descriptionFor("default_sniffing")} saving={savingKey === "default_sniffing"} onSave={saveSniffing}>
+        <SettingRow label={t("settings.sniffing")} description={descriptionFor("default_sniffing")} saving={savingKey === "default_sniffing"} onSave={saveSniffing} t={t}>
           <label className="check-row" htmlFor="setting-sniffing">
             <input id="setting-sniffing" type="checkbox" checked={formState.default_sniffing} onChange={(e) => setFormState((c) => ({ ...c, default_sniffing: e.target.checked }))} />
-            <span>{formState.default_sniffing ? "Enabled" : "Disabled"}</span>
+            <span>{formState.default_sniffing ? t("common.enabled") : t("common.disabled")}</span>
           </label>
         </SettingRow>
 
-        <SettingRow label="Default fragment" description={descriptionFor("default_fragment")} saving={savingKey === "default_fragment"} onSave={saveFragment}>
+        <SettingRow label={t("settings.fragment")} description={descriptionFor("default_fragment")} saving={savingKey === "default_fragment"} onSave={saveFragment} t={t}>
           <input className="text-field" type="text" placeholder="Empty = disabled" value={formState.default_fragment} onChange={(e) => setFormState((c) => ({ ...c, default_fragment: e.target.value }))} />
         </SettingRow>
 
-        <SettingRow label="Default log level" description={descriptionFor("default_log_level")} saving={savingKey === "default_log_level"} onSave={saveLogLevel}>
+        <SettingRow label={t("settings.log_level")} description={descriptionFor("default_log_level")} saving={savingKey === "default_log_level"} onSave={saveLogLevel} t={t}>
           <select className="select-field" value={formState.default_log_level} onChange={(e) => setFormState((c) => ({ ...c, default_log_level: e.target.value }))}>
             <option value="debug">debug</option>
             <option value="info">info</option>
@@ -137,7 +139,7 @@ export function SettingsPage({ session, onUnauthorized }: SettingsPageProps) {
           </select>
         </SettingRow>
 
-        <SettingRow label="Default DNS servers" description={descriptionFor("default_dns_servers")} saving={savingKey === "default_dns_servers"} onSave={saveDnsServers}>
+        <SettingRow label={t("settings.dns_servers")} description={descriptionFor("default_dns_servers")} saving={savingKey === "default_dns_servers"} onSave={saveDnsServers} t={t}>
           <textarea className="text-field" rows={3} placeholder='["1.1.1.1", "8.8.8.8"]' value={formState.default_dns_servers} onChange={(e) => setFormState((c) => ({ ...c, default_dns_servers: e.target.value }))} />
         </SettingRow>
       </section>
@@ -150,10 +152,11 @@ interface SettingRowProps {
   description: string | null;
   saving: boolean;
   onSave: () => void;
+  t: (key: any) => string;
   children: React.ReactNode;
 }
 
-function SettingRow({ label, description, saving, onSave, children }: SettingRowProps) {
+function SettingRow({ label, description, saving, onSave, t, children }: SettingRowProps) {
   return (
     <div className="setting-row">
       <div className="section-heading compact-heading">
@@ -162,7 +165,7 @@ function SettingRow({ label, description, saving, onSave, children }: SettingRow
           {description ? <p className="muted-text">{description}</p> : null}
         </div>
         <button className="table-button" type="button" onClick={onSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
       {children}
