@@ -949,3 +949,37 @@ select {
   background: #172033;
   color: #ffffff;
 }
+
+/* Language switcher */
+.language-switcher {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.sidebar .language-switcher {
+  margin-top: auto;
+  margin-bottom: 0;
+  padding-top: 16px;
+}
+
+.lang-btn {
+  padding: 6px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: transparent;
+  color: #53637c;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.lang-btn:hover {
+  background: #f1f5f9;
+}
+
+.lang-btn.active {
+  background: #172033;
+  border-color: #172033;
+  color: #ffffff;
+}

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useMemo, useState } from "react";
 import { getApiBaseUrl, loginAdmin, PanelApiError } from "../lib/api";
 import { clearStoredSession, loadStoredSession, saveStoredSession, type StoredSession } from "../lib/session";
+import { useI18n } from "../lib/i18n";
 import { NodeProfilesPage } from "../pages/NodeProfilesPage";
 import { NodesPage } from "../pages/NodesPage";
 import { PlansPage } from "../pages/PlansPage";
@@ -18,30 +19,48 @@ interface LoginFormState {
 
 type PanelPage = "dashboard" | "users" | "plans" | "subscriptions" | "templates" | "nodes" | "profiles" | "warp" | "routing" | "settings";
 
-interface NavigationItem {
-  page: PanelPage;
-  label: string;
-}
-
 const initialLoginFormState: LoginFormState = {
   email: "owner@example.com",
   password: "",
 };
 
-const navigationItems: NavigationItem[] = [
-  { page: "dashboard", label: "Dashboard" },
-  { page: "users", label: "Users" },
-  { page: "plans", label: "Plans" },
-  { page: "subscriptions", label: "Subscriptions" },
-  { page: "templates", label: "Templates" },
-  { page: "nodes", label: "Nodes" },
-  { page: "profiles", label: "Profiles" },
-  { page: "warp", label: "WARP" },
-  { page: "routing", label: "Routing" },
-  { page: "settings", label: "Settings" },
+const NAV_KEYS: { page: PanelPage; labelKey: "nav.dashboard" | "nav.users" | "nav.plans" | "nav.subscriptions" | "nav.templates" | "nav.nodes" | "nav.profiles" | "nav.warp" | "nav.routing" | "nav.settings" }[] = [
+  { page: "dashboard", labelKey: "nav.dashboard" },
+  { page: "users", labelKey: "nav.users" },
+  { page: "plans", labelKey: "nav.plans" },
+  { page: "subscriptions", labelKey: "nav.subscriptions" },
+  { page: "templates", labelKey: "nav.templates" },
+  { page: "nodes", labelKey: "nav.nodes" },
+  { page: "profiles", labelKey: "nav.profiles" },
+  { page: "warp", labelKey: "nav.warp" },
+  { page: "routing", labelKey: "nav.routing" },
+  { page: "settings", labelKey: "nav.settings" },
 ];
 
+function LanguageSwitcher() {
+  const { locale, setLocale } = useI18n();
+  return (
+    <div className="language-switcher">
+      <button
+        type="button"
+        className={locale === "en" ? "lang-btn active" : "lang-btn"}
+        onClick={() => setLocale("en")}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        className={locale === "ru" ? "lang-btn active" : "lang-btn"}
+        onClick={() => setLocale("ru")}
+      >
+        RU
+      </button>
+    </div>
+  );
+}
+
 export function App() {
+  const { t } = useI18n();
   const [storedSession, setStoredSession] = useState<StoredSession | null>(() => loadStoredSession());
   const [activePage, setActivePage] = useState<PanelPage>("dashboard");
   const [formState, setFormState] = useState<LoginFormState>(initialLoginFormState);
@@ -50,14 +69,13 @@ export function App() {
 
   const expiresAtLabel = useMemo(() => {
     if (!storedSession?.session.expires_at) {
-      return "No active session";
+      return t("session.none");
     }
-
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(storedSession.session.expires_at));
-  }, [storedSession]);
+  }, [storedSession, t]);
 
   const logout = useCallback((message?: string) => {
     clearStoredSession();
@@ -68,8 +86,8 @@ export function App() {
   }, []);
 
   const handleUnauthorized = useCallback(() => {
-    logout("Session expired. Sign in again.");
-  }, [logout]);
+    logout(t("session.expired"));
+  }, [logout, t]);
 
   function updateFormField(fieldName: keyof LoginFormState, value: string) {
     setFormState((currentValue) => ({ ...currentValue, [fieldName]: value }));
@@ -82,7 +100,7 @@ export function App() {
     const password = formState.password;
 
     if (!email || !password) {
-      setErrorMessage("Email and password are required.");
+      setErrorMessage(t("login.error.required"));
       return;
     }
 
@@ -98,7 +116,7 @@ export function App() {
       if (error instanceof PanelApiError) {
         setErrorMessage(`${error.message} (${error.code})`);
       } else {
-        setErrorMessage("Unable to connect to panel-api.");
+        setErrorMessage(t("login.error.connection"));
       }
     } finally {
       setIsSubmitting(false);
@@ -109,14 +127,15 @@ export function App() {
     return (
       <main className="auth-layout">
         <form className="auth-card" onSubmit={submitLogin}>
-          <p className="eyebrow">Lenker Provider Panel</p>
-          <h1>Admin access</h1>
+          <LanguageSwitcher />
+          <p className="eyebrow">{t("login.eyebrow")}</p>
+          <h1>{t("login.title")}</h1>
           <p className="muted-text">
-            Sign in with the local admin created by <code>make docker-bootstrap-admin</code>.
+            {t("login.subtitle")}
           </p>
 
           <label className="field-label" htmlFor="email">
-            Admin email
+            {t("login.email")}
           </label>
           <input
             id="email"
@@ -128,7 +147,7 @@ export function App() {
           />
 
           <label className="field-label" htmlFor="password">
-            Password
+            {t("login.password")}
           </label>
           <input
             id="password"
@@ -142,10 +161,10 @@ export function App() {
           {errorMessage ? <p className="error-text">{errorMessage}</p> : null}
 
           <button className="primary-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Signing in..." : "Sign in"}
+            {isSubmitting ? t("login.submitting") : t("login.submit")}
           </button>
 
-          <p className="helper-text">API target: {getApiBaseUrl()}</p>
+          <p className="helper-text">{t("login.api_target")}: {getApiBaseUrl()}</p>
         </form>
       </main>
     );
@@ -156,30 +175,31 @@ export function App() {
       <aside className="sidebar">
         <div>
           <p className="eyebrow">Lenker</p>
-          <h1>Provider Panel</h1>
+          <h1>{t("sidebar.title")}</h1>
         </div>
         <nav className="nav-list" aria-label="Primary navigation">
-          {navigationItems.map((item) => (
+          {NAV_KEYS.map((item) => (
             <button
               key={item.page}
               className={item.page === activePage ? "nav-link active" : "nav-link"}
               type="button"
               onClick={() => setActivePage(item.page)}
             >
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </nav>
+        <LanguageSwitcher />
       </aside>
 
       <section className="content-shell">
         <header className="topbar">
           <div>
-            <p className="muted-text">Signed in as</p>
+            <p className="muted-text">{t("topbar.signed_in_as")}</p>
             <strong>{storedSession.admin.email}</strong>
           </div>
           <button className="secondary-button" type="button" onClick={() => logout()}>
-            Sign out
+            {t("topbar.sign_out")}
           </button>
         </header>
 
@@ -203,32 +223,30 @@ interface DashboardProps {
 }
 
 function Dashboard({ expiresAtLabel }: DashboardProps) {
+  const { t } = useI18n();
   return (
     <>
       <section className="hero-card" id="dashboard">
-        <p className="eyebrow">MVP v0.1</p>
-        <h2>Dashboard shell is ready</h2>
-        <p>
-          The React app authenticates against panel-api, stores the admin session for the current browser tab,
-          and renders the first provider dashboard shell.
-        </p>
+        <p className="eyebrow">{t("dashboard.eyebrow")}</p>
+        <h2>{t("dashboard.title")}</h2>
+        <p>{t("dashboard.description")}</p>
         <dl className="details-grid">
           <div>
-            <dt>Session expires</dt>
+            <dt>{t("dashboard.session_expires")}</dt>
             <dd>{expiresAtLabel}</dd>
           </div>
           <div>
-            <dt>Backend target</dt>
+            <dt>{t("dashboard.backend_target")}</dt>
             <dd>{getApiBaseUrl()}</dd>
           </div>
         </dl>
       </section>
 
       <section className="cards-grid">
-        <StatusCard title="Users" value="Live" description="Create, edit, suspend, and activate users." />
-        <StatusCard title="Plans" value="Live" description="Create, edit, and archive subscription plans." />
-        <StatusCard title="Subscriptions" value="Live" description="Create, update, and renew subscriptions." />
-        <StatusCard title="Nodes" value="Live" description="Bootstrap, inspect, drain, disable, and enable nodes." />
+        <StatusCard title={t("dashboard.users")} value={t("dashboard.live")} description={t("dashboard.users_desc")} />
+        <StatusCard title={t("dashboard.plans")} value={t("dashboard.live")} description={t("dashboard.plans_desc")} />
+        <StatusCard title={t("dashboard.subscriptions")} value={t("dashboard.live")} description={t("dashboard.subscriptions_desc")} />
+        <StatusCard title={t("dashboard.nodes")} value={t("dashboard.live")} description={t("dashboard.nodes_desc")} />
       </section>
     </>
   );
